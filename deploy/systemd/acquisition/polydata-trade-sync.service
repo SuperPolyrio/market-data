@@ -1,0 +1,18 @@
+[Unit]
+Description=Polymarket OrderFilled raw and BUY/SELL fact acquisition
+After=network-online.target polydata-polygon-rpc-tunnel.service
+Wants=network-online.target polydata-polygon-rpc-tunnel.service
+
+[Service]
+Type=simple
+WorkingDirectory=/__MARKET_DATA_ROOT__
+EnvironmentFile=%h/.config/polydata/polydata.env
+Environment=PYTHONPATH=/__MARKET_DATA_ROOT__/src
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/flock --nonblock --conflict-exit-code 75 %t/polydata-orderfilled-raw-fact-writer.lock /bin/bash -lc 'exec "${POLYDATA_PYTHON_BIN:-python3}" -m market_data orderfilled --watch --max-windows "${POLYDATA_ORDERFILLED_MAX_WINDOWS:-50}" --window-size "${POLYDATA_ORDERFILLED_WINDOW_BLOCKS:-200}" --confirmations "${POLYDATA_ORDERFILLED_CONFIRMATIONS:-20}" --retry-unresolved-tokens "${POLYDATA_ORDERFILLED_RETRY_TOKENS:-200}" --interval "${POLYDATA_ORDERFILLED_INTERVAL_SECONDS:-5}"'
+Restart=always
+RestartSec=120
+RestartPreventExitStatus=75
+
+[Install]
+WantedBy=polydata-local-collector.target

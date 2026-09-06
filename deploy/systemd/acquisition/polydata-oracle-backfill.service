@@ -1,0 +1,13 @@
+[Unit]
+Description=Polymarket resumable full Oracle backfill slice
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/__MARKET_DATA_ROOT__
+EnvironmentFile=%h/.config/polydata/polydata.env
+Environment=PYTHONPATH=/__MARKET_DATA_ROOT__/src
+Environment=PYTHONUNBUFFERED=1
+Environment=POLYDATA_ORACLE_FALLBACK_RPC_URL=https://polygon.gateway.tenderly.co
+ExecStart=/bin/bash -lc 'exec "${POLYDATA_PYTHON_BIN:-python3}" -m market_data oracle --mode backfill --window-blocks "${POLYDATA_ORACLE_BACKFILL_WINDOW_BLOCKS:-1000}" --max-windows "${POLYDATA_ORACLE_BACKFILL_MAX_WINDOWS:-1000}"'

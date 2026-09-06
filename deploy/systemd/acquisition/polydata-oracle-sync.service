@@ -1,0 +1,18 @@
+[Unit]
+Description=Polymarket UMA and UpDown Oracle acquisition
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/__MARKET_DATA_ROOT__
+EnvironmentFile=%h/.config/polydata/polydata.env
+Environment=PYTHONPATH=/__MARKET_DATA_ROOT__/src
+Environment=PYTHONUNBUFFERED=1
+Environment=POLYDATA_ORACLE_FALLBACK_RPC_URL=https://polygon.gateway.tenderly.co
+ExecStart=/bin/bash -lc 'exec "${POLYDATA_PYTHON_BIN:-python3}" -m market_data oracle --mode live --watch --confirmations "${POLYDATA_ORACLE_CONFIRMATIONS:-20}" --rewind "${POLYDATA_ORACLE_REWIND_BLOCKS:-100}" --window-blocks "${POLYDATA_ORACLE_WINDOW_BLOCKS:-1000}" --max-windows "${POLYDATA_ORACLE_MAX_WINDOWS:-50}" --interval "${POLYDATA_ORACLE_INTERVAL_SECONDS:-600}"'
+Restart=always
+RestartSec=600
+
+[Install]
+WantedBy=polydata-local-collector.target

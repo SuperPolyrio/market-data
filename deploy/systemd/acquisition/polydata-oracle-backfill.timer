@@ -1,0 +1,10 @@
+[Unit]
+Description=Continue full Oracle backfill slices
+
+[Timer]
+OnBootSec=20min
+OnUnitActiveSec=1h
+Persistent=true
+
+[Install]
+WantedBy=timers.target

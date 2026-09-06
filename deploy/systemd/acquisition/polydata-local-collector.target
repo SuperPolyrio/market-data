@@ -1,0 +1,7 @@
+[Unit]
+Description=market-data Market, OrderFilled and Oracle collectors
+Wants=polydata-market-sync.service polydata-trade-sync.service polydata-oracle-sync.service
+After=network-online.target
+
+[Install]
+WantedBy=default.target

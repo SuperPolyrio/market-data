@@ -1,0 +1,12 @@
+[Unit]
+Description=Polymarket resumable full Market backfill slice
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/__MARKET_DATA_ROOT__
+EnvironmentFile=%h/.config/polydata/polydata.env
+Environment=PYTHONPATH=/__MARKET_DATA_ROOT__/src
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/bin/bash -lc 'exec "${POLYDATA_PYTHON_BIN:-python3}" -m market_data market backfill --max-pages "${POLYDATA_MARKET_BACKFILL_MAX_PAGES:-250}"'
