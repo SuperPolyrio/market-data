@@ -719,7 +719,7 @@ def reconcile_market_links(conn: Any, *, limit: int = 10_000) -> dict[str, int]:
     if not conn.execute(
         "SELECT pg_try_advisory_xact_lock(hashtext(%s)) AS locked", (state_key,),
     ).fetchone()["locked"]:
-        return {"oracle_linked": 0, "adapter_linked": 0, "pass_complete": 1}
+        return {"oracle_linked": 0, "adapter_linked": 0, "pass_complete": 0, "skipped_busy": 1}
     state = get_state(conn, state_key)
     offsets = json.loads(state["value"]) if state and state.get("value") else {}
     counts: dict[str, int] = {}
@@ -1100,7 +1100,9 @@ def run(
                 totals["batches"] += 1
                 for key in ("oracle_linked", "adapter_linked"):
                     totals[key] += stats[key]
-                if dry_run or stats["pass_complete"]:
+                totals["pass_complete"] = stats["pass_complete"]
+                totals["skipped_busy"] = stats.get("skipped_busy", 0)
+                if dry_run or stats["pass_complete"] or totals["skipped_busy"]:
                     break
             return totals
         except Exception:

@@ -32,6 +32,7 @@ token lookup helper, but must not import the retired polymonitor collectors.
 - `polydata-oracle-backfill.timer`
 - `polydata-oracle-ctf-backfill.timer`
 - `polydata-oracle-modules-backfill.timer`
+- `polydata-oracle-reconcile.timer`
 
 The unit templates in `deploy/systemd/acquisition` run this repository's
 `.venv/bin/python`, set `PYTHONDONTWRITEBYTECODE=1`, and share the existing
@@ -97,7 +98,7 @@ collector target.
 
 Create the repository virtual environment, install this package, render
 `/__MARKET_DATA_ROOT__` in the unit templates to the absolute checkout, then
-enable the three live units and five timers above. Server-side Python
+enable the three live units and six timers above. Server-side Python
 consumers should install the repository editable with `--no-deps` so imports
 resolve to this checkout.
 

@@ -1,0 +1,17 @@
+[Unit]
+Description=Retry Oracle links after market metadata arrives
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/__MARKET_DATA_ROOT__
+EnvironmentFile=%h/.config/polydata/polydata.env
+Environment=PYTHONPATH=/__MARKET_DATA_ROOT__/src
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/__MARKET_DATA_ROOT__/.venv/bin/python -m market_data oracle --mode reconcile --max-windows 0
+TimeoutStartSec=infinity
+Restart=on-failure
+RestartSec=60
+Nice=10

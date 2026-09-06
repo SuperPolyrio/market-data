@@ -101,6 +101,16 @@ def test_late_markets_reconcile_after_page_wrap_without_moving_chain_cursor(data
     ).fetchone()["market_id"] is None
 
 
+def test_reconciliation_busy_does_not_report_a_completed_pass(database):
+    database.commit()
+    with psycopg.connect(database.info.dsn, row_factory=dict_row) as blocker:
+        blocker.execute("SELECT pg_advisory_xact_lock(hashtext('oracle_market_reconciliation_v1'))")
+        result = oracle.run(mode="reconcile", max_windows=0, conn=database)
+        assert result["skipped_busy"] == 1
+        assert result["pass_complete"] == 0
+        assert result["batches"] == 1
+
+
 def test_event_replay_preserves_existing_enrichment_and_identity(database):
     event = database.execute("""
         INSERT INTO oracle.oracle_events
