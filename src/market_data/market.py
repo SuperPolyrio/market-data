@@ -26,6 +26,7 @@ from market_data.config import GAMMA_API_BASE
 from market_data.storage import connect_postgres, execute_values, get_state, set_state
 
 PAGE_SIZE = 100
+TOKEN_LOOKUP_BATCH_SIZE = 6
 CREATED_STATE = "market.gamma.created.{source}.v1"
 BACKFILL_STATE = "market.gamma.backfill.{source}.v1"
 REVISIT_STATE = "market.gamma.revisit.updated.{source}.v2"
@@ -567,6 +568,64 @@ def _boolean(value: Any, *, default: bool) -> bool:
     raise ValueError(f"invalid boolean: {value!r}")
 
 
+def sync_gamma_markets_for_token_ids(
+    token_ids: Iterable[Any],
+    *,
+    session: requests.Session | None = None,
+    conn: Any | None = None,
+) -> int:
+    """Resolve token IDs through official Gamma and persist canonical markets."""
+    requested = list(dict.fromkeys(_text(value) for value in token_ids if _text(value)))
+    if not requested:
+        return 0
+
+    session = session or _http_session()
+    rows: dict[str, dict[str, Any]] = {}
+    requested_set = set(requested)
+    for start in range(0, len(requested), TOKEN_LOOKUP_BATCH_SIZE):
+        chunk = requested[start : start + TOKEN_LOOKUP_BATCH_SIZE]
+        response = session.get(
+            f"{GAMMA_API_BASE}/markets",
+            params={"clob_token_ids": chunk, "limit": 100},
+            timeout=60,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        markets = payload.get("markets") if isinstance(payload, Mapping) else payload
+        if not isinstance(markets, list):
+            raise RuntimeError("Gamma /markets returned an invalid payload")
+        for raw in markets:
+            if not isinstance(raw, Mapping):
+                continue
+            try:
+                row = normalize_market(raw)
+            except ValueError:
+                continue
+            if requested_set.isdisjoint((row["yes_token_id"], row["no_token_id"])):
+                continue
+            rows[row["condition_id"]] = row
+
+    if not rows:
+        return 0
+
+    own_conn = conn is None
+    if own_conn:
+        conn = connect_postgres()
+    assert conn is not None
+    try:
+        # Shell promotion remains collector-owned so it always gets an audit
+        # receipt. This fast path only inserts or refreshes a Gamma owner.
+        persisted = upsert_markets(conn, rows.values())
+        conn.commit()
+        return persisted
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        if own_conn:
+            conn.close()
+
+
 def ensure_schema(conn: Any) -> None:
     conn.execute("CREATE SCHEMA IF NOT EXISTS core")
     conn.execute("CREATE SCHEMA IF NOT EXISTS ops")
@@ -820,6 +879,7 @@ def upsert_markets(
     markets: Iterable[Mapping[str, Any]],
     promotions: Iterable[Mapping[str, Any]] = (),
 ) -> int:
+    conn = getattr(conn, "_pg_conn", conn)
     rows = list(markets)
     if not rows:
         return 0

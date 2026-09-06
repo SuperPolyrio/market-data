@@ -118,6 +118,56 @@ def test_normalize_market_rejects_noncanonical_rows(changes, message):
         market.normalize_market(gamma_market(**changes))
 
 
+def test_sync_gamma_markets_for_token_ids_uses_official_gamma_and_target_upsert(
+    monkeypatch,
+):
+    class LookupSession:
+        def __init__(self):
+            self.calls = []
+
+        def get(self, url, *, params, timeout):
+            self.calls.append((url, params, timeout))
+            return Response([gamma_market()])
+
+    class LookupConn:
+        def __init__(self):
+            self.calls = []
+
+        def commit(self):
+            self.calls.append("commit")
+
+        def rollback(self):
+            self.calls.append("rollback")
+
+        def close(self):
+            self.calls.append("close")
+
+    session = LookupSession()
+    conn = LookupConn()
+    persisted = []
+    monkeypatch.setattr(market, "connect_postgres", lambda: conn)
+    monkeypatch.setattr(
+        market,
+        "upsert_markets",
+        lambda _conn, rows: persisted.extend(rows) or len(persisted),
+    )
+
+    written = market.sync_gamma_markets_for_token_ids(
+        ["token-yes", "token-yes"], session=session
+    )
+
+    assert written == 1
+    assert persisted[0]["condition_id"] == "0xabc"
+    assert session.calls == [
+        (
+            f"{market.GAMMA_API_BASE}/markets",
+            {"clob_token_ids": ["token-yes"], "limit": 100},
+            60,
+        )
+    ]
+    assert conn.calls == ["commit", "close"]
+
+
 class Response:
     def __init__(self, payload):
         self.payload = payload

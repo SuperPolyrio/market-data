@@ -8,4 +8,5 @@ Type=oneshot
 WorkingDirectory=/__MARKET_DATA_ROOT__
 EnvironmentFile=%h/.config/polydata/polydata.env
 Environment=PYTHONPATH=/__MARKET_DATA_ROOT__/src
-ExecStart=/bin/bash -lc 'exec "${POLYDATA_PYTHON_BIN:-python3}" -m market_data market revisit --max-pages "${POLYDATA_MARKET_REVISIT_MAX_PAGES:-100}"'
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/bin/bash -lc 'exec /__MARKET_DATA_ROOT__/.venv/bin/python -m market_data market revisit --max-pages "${POLYDATA_MARKET_REVISIT_MAX_PAGES:-100}"'

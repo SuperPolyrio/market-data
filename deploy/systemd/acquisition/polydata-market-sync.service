@@ -9,7 +9,8 @@ WorkingDirectory=/__MARKET_DATA_ROOT__
 EnvironmentFile=%h/.config/polydata/polydata.env
 Environment=PYTHONPATH=/__MARKET_DATA_ROOT__/src
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/bin/bash -lc 'exec "${POLYDATA_PYTHON_BIN:-python3}" -m market_data market sync --max-pages "${POLYDATA_MARKET_SYNC_MAX_PAGES:-100}" --watch --interval "${POLYDATA_MARKET_SYNC_INTERVAL_SECONDS:-900}" --catchup-interval "${POLYDATA_MARKET_SYNC_CATCHUP_INTERVAL_SECONDS:-5}" --error-interval "${POLYDATA_MARKET_SYNC_ERROR_INTERVAL_SECONDS:-300}" --overlap-minutes "${POLYDATA_MARKET_SYNC_OVERLAP_MINUTES:-120}"'
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/bin/bash -lc 'exec /__MARKET_DATA_ROOT__/.venv/bin/python -m market_data market sync --max-pages "${POLYDATA_MARKET_SYNC_MAX_PAGES:-100}" --watch --interval "${POLYDATA_MARKET_SYNC_INTERVAL_SECONDS:-900}" --catchup-interval "${POLYDATA_MARKET_SYNC_CATCHUP_INTERVAL_SECONDS:-5}" --error-interval "${POLYDATA_MARKET_SYNC_ERROR_INTERVAL_SECONDS:-300}" --overlap-minutes "${POLYDATA_MARKET_SYNC_OVERLAP_MINUTES:-120}"'
 Restart=always
 RestartSec=120
 
