@@ -6,7 +6,7 @@ Minimal production engine for Polymarket data:
 - Polygon OrderFilled immutable raw plus BUY/SELL facts in ClickHouse
 - Polygon UMA, Adapter, NegRisk and UpDown oracle events in PostgreSQL
 
-It never creates placeholder markets and contains no cashflow, PnL, dashboard or one-off repair pipeline. Unknown OrderFilled tokens remain in raw storage and an unresolved registry queue until a source-proven owner exists.
+It never creates placeholder markets and contains no cashflow, PnL, dashboard or one-off repair pipeline. Unknown OrderFilled tokens remain in raw storage and an unresolved registry queue until a source-proven owner exists. Non-combo gaps use a bounded, once-per-minute official Gamma token lookup before their full raw history is projected; e333 combo gaps require exact official Data API evidence.
 
 ## Commands
 
@@ -22,4 +22,4 @@ python -m market_data oracle --mode backfill
 
 `market classify-identities` is read-only unless `--apply` is supplied. Apply is a single CAS transaction, validates database constraints and stores one receipt in `ops.sync_state`; it creates no local artifact.
 
-Production systemd templates are in `deploy/systemd/acquisition`. Consumers read the existing PostgreSQL and ClickHouse storage contracts, so they do not import collector code.
+Production systemd templates are in `deploy/systemd/acquisition`. Consumers read the existing PostgreSQL and ClickHouse storage contracts; Python helpers resolve to this installed repository. The retired Polymonitor acquisition entrypoints and cashflow/placeholder-remap units have been removed.
