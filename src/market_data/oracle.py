@@ -28,6 +28,7 @@ POLYGON_CHAIN_ID = 137
 CONFIRMATIONS = 20
 REWIND_BLOCKS = 100
 OFFICIAL_MANIFEST_COMMIT = "75d1818547862a5bd3477ed2e6b16f693d42dab6"
+_CODEC = Web3().codec
 
 OLD_ORACLE = "0xbb1a8db2d4350976a11cdfa60a1d43f97710da49"
 OO_V2_OLD = "0x2c0367a9db231ddebd88a94b4f6461a6e47c58b1"
@@ -75,6 +76,7 @@ FULL_HISTORY_START = min((*ORACLE_STARTS.values(), *ADAPTER_STARTS.values()))
 UMA_LIVE_KEY = "oracle_sync"
 UMA_LIVENESS_KEY = "oracle_sync_live"
 UPDOWN_LIVE_KEY = "oracle_updown_sync_live"
+MODULES_LIVE_KEY = "oracle_modules_sync_live"
 UMA_BACKFILL_KEY = "oracle_backfill_full"
 UPDOWN_BACKFILL_KEY = "oracle_backfill_updown"
 
@@ -206,7 +208,7 @@ def _normalized_log(raw: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _decode(abi: Mapping[str, Any], raw: Mapping[str, Any]) -> dict[str, Any]:
-    return dict(get_event_data(Web3().codec, abi, _normalized_log(raw))["args"])
+    return dict(get_event_data(_CODEC, abi, _normalized_log(raw))["args"])
 
 
 def _topic0(log: Mapping[str, Any]) -> str:
@@ -350,24 +352,60 @@ def _fetch(
     addresses: Iterable[str],
     topics: Iterable[str],
     starts: Mapping[str, int] | None = None,
+    *,
+    split_limits: bool = True,
 ) -> list[dict[str, Any]]:
     active = [a.lower() for a in addresses if not starts or end >= starts.get(a.lower(), 0)]
     if not active or start > end:
         return []
     effective_start = max(start, min((starts or {}).get(a, start) for a in active))
-    logs = rpc.logs(effective_start, end, addresses=active, topics=[list(topics)])
+    topic_list = list(topics)
+    try:
+        logs = rpc.logs(effective_start, end, addresses=active, topics=[topic_list])
+    except (ConnectionError, RuntimeError) as exc:
+        message = str(exc).lower()
+        if not split_limits or effective_start == end or not any(part in message for part in (
+            "query returned more than", "too many results", "response size exceeded",
+            "block range is too", "block range limit", "maximum block range",
+        )):
+            raise
+        middle = (effective_start + end) // 2
+        return (
+            _fetch(rpc, effective_start, middle, active, topic_list, starts)
+            + _fetch(rpc, middle + 1, end, active, topic_list, starts)
+        )
     return [dict(log) for log in logs if not log.get("removed")]
 
 
 def _timestamps(rpc: RpcClient, logs: Iterable[Mapping[str, Any]]) -> dict[int, datetime]:
-    result: dict[int, datetime] = {}
-    numbers = sorted({_int(log.get("blockNumber", 0)) for log in logs})
-    blocks = rpc.blocks(numbers) if hasattr(rpc, "blocks") else [rpc.block(n) for n in numbers]
-    for number, block in zip(numbers, blocks):
+    logs = list(logs)
+    timestamps: dict[int, int] = {}
+    hashes: dict[int, str] = {}
+    for log in logs:
+        number = _int(log["blockNumber"])
+        block_hash = _hex(log.get("blockHash"))
+        if block_hash:
+            if number in hashes and hashes[number] != block_hash:
+                raise RuntimeError(f"conflicting Polygon block hashes for {number}")
+            hashes[number] = block_hash
+        if log.get("blockTimestamp") is not None:
+            timestamp = _int(log["blockTimestamp"])
+            if timestamp <= 0 or (number in timestamps and timestamps[number] != timestamp):
+                raise RuntimeError(f"conflicting Polygon block timestamp for {number}")
+            timestamps[number] = timestamp
+    missing = sorted({_int(log["blockNumber"]) for log in logs} - timestamps.keys())
+    blocks = rpc.blocks(missing) if hasattr(rpc, "blocks") else [rpc.block(n) for n in missing]
+    if len(blocks) != len(missing):
+        raise RuntimeError("Polygon block timestamp response omitted blocks")
+    for number, block in zip(missing, blocks):
         if not block or block.get("timestamp") is None:
             raise RuntimeError(f"missing Polygon block timestamp for {number}")
-        result[number] = datetime.fromtimestamp(_int(block["timestamp"]), timezone.utc)
-    return result
+        if block.get("number") is not None and _int(block["number"]) != number:
+            raise RuntimeError(f"unexpected Polygon block header for {number}")
+        if block.get("hash") and number in hashes and _hex(block["hash"]) != hashes[number]:
+            raise RuntimeError(f"Polygon block hash differs from event for {number}")
+        timestamps[number] = _int(block["timestamp"])
+    return {number: datetime.fromtimestamp(value, timezone.utc) for number, value in timestamps.items()}
 
 
 def _decode_adapter(log: Mapping[str, Any], event_time: datetime) -> dict[str, Any] | None:
@@ -475,18 +513,17 @@ def _load_neg_map(conn: Any, request_ids: Iterable[str]) -> dict[str, tuple[str,
 
 
 def _market_index(rows: Iterable[Mapping[str, Any]]) -> dict[str, dict[str, Mapping[str, Any]]]:
-    gamma: dict[str, Mapping[str, Any]] = {}
-    condition: dict[str, Mapping[str, Any]] = {}
-    question_buckets: dict[str, list[Mapping[str, Any]]] = {}
+    buckets: dict[str, dict[str, list[Mapping[str, Any]]]] = {
+        "gamma": {}, "condition": {}, "question": {},
+    }
     for row in rows:
-        if row.get("gamma_market_id"):
-            gamma[str(row["gamma_market_id"])] = row
-        if row.get("condition_id"):
-            condition[str(row["condition_id"]).lower()] = row
-        if row.get("question_id"):
-            question_buckets.setdefault(str(row["question_id"]).lower(), []).append(row)
-    question = {key: bucket[0] for key, bucket in question_buckets.items() if len(bucket) == 1}
-    return {"gamma": gamma, "condition": condition, "question": question}
+        for kind, field in (("gamma", "gamma_market_id"), ("condition", "condition_id"), ("question", "question_id")):
+            if row.get(field):
+                buckets[kind].setdefault(str(row[field]).lower(), []).append(row)
+    return {
+        kind: {key: values[0] for key, values in entries.items() if len(values) == 1}
+        for kind, entries in buckets.items()
+    }
 
 
 def _load_markets(
@@ -519,13 +556,16 @@ def _load_markets(
 
 
 def _bridge(index: Mapping[str, Mapping[str, Mapping[str, Any]]], gamma: str, qid: str) -> tuple[Mapping[str, Any] | None, str]:
+    matches = []
     if gamma and gamma in index["gamma"]:
-        return index["gamma"][gamma], "by_gamma_market_id"
+        matches.append((index["gamma"][gamma], "by_gamma_market_id"))
     key = qid.lower()
     if key and key in index["condition"]:
-        return index["condition"][key], "by_condition_id"
+        matches.append((index["condition"][key], "by_condition_id"))
     if key and key in index["question"]:
-        return index["question"][key], "question_id"
+        matches.append((index["question"][key], "question_id"))
+    if matches and len({row["id"] for row, _ in matches}) == 1:
+        return matches[0]
     return None, ""
 
 
@@ -551,10 +591,23 @@ def _write_adapter_events(conn: Any, rows: Sequence[Mapping[str, Any]]) -> None:
                 event_status=EXCLUDED.event_status,
                 source_adapter=EXCLUDED.source_adapter,
                 question_id=EXCLUDED.question_id,
-                market_id=EXCLUDED.market_id,
-                condition_id=EXCLUDED.condition_id,
+                market_id=COALESCE(EXCLUDED.market_id, oracle.adapter_events.market_id),
+                condition_id=COALESCE(NULLIF(EXCLUDED.condition_id, ''), oracle.adapter_events.condition_id),
                 settled_price_raw=EXCLUDED.settled_price_raw,
                 payload_json=EXCLUDED.payload_json
+            WHERE ROW(
+                oracle.adapter_events.block_number, oracle.adapter_events.event_time,
+                oracle.adapter_events.event_status, oracle.adapter_events.source_adapter,
+                oracle.adapter_events.question_id, oracle.adapter_events.market_id,
+                oracle.adapter_events.condition_id, oracle.adapter_events.settled_price_raw,
+                oracle.adapter_events.payload_json
+            ) IS DISTINCT FROM ROW(
+                EXCLUDED.block_number, EXCLUDED.event_time, EXCLUDED.event_status,
+                EXCLUDED.source_adapter, EXCLUDED.question_id,
+                COALESCE(EXCLUDED.market_id, oracle.adapter_events.market_id),
+                COALESCE(NULLIF(EXCLUDED.condition_id, ''), oracle.adapter_events.condition_id),
+                EXCLUDED.settled_price_raw, EXCLUDED.payload_json
+            )
             """,
             rows,
         )
@@ -564,6 +617,7 @@ def _refresh_adapter_projection(conn: Any, ancillary_keys: Iterable[str]) -> Non
     keys = sorted({key.lower() for key in ancillary_keys if key})
     if not keys:
         return
+    hashes = [hashlib.sha256(key.encode()).hexdigest() for key in keys]
     conn.execute(
         """
         INSERT INTO oracle.uma_adapter_mapping
@@ -577,14 +631,17 @@ def _refresh_adapter_projection(conn: Any, ancillary_keys: Iterable[str]) -> Non
             FROM oracle.adapter_events
             WHERE event_status = 'adapter_question_initialized'
               AND payload_json->>'ancillary_data' = ANY(%s::text[])
+              AND encode(digest(payload_json->>'ancillary_data', 'sha256'), 'hex') = ANY(%s::text[])
             ORDER BY payload_json->>'ancillary_data', block_number DESC,
                      log_index DESC, tx_hash DESC
         ) latest
         ON CONFLICT (ancillary_data_hash) DO UPDATE SET
             question_id=EXCLUDED.question_id,
             source_adapter=EXCLUDED.source_adapter
+        WHERE (oracle.uma_adapter_mapping.question_id, oracle.uma_adapter_mapping.source_adapter)
+              IS DISTINCT FROM (EXCLUDED.question_id, EXCLUDED.source_adapter)
         """,
-        (keys,),
+        (keys, hashes),
     )
 
 
@@ -625,12 +682,23 @@ def _write_oracle_events(conn: Any, rows: Sequence[Mapping[str, Any]]) -> None:
     )
     names = ", ".join(columns)
     values = ", ".join(f"%({column})s" for column in columns)
-    updates = ", ".join(f"{column}=EXCLUDED.{column}" for column in columns[2:])
+    enrichment = {"external_market_id", "market_title", "matched_by",
+                  "adapter_question_id", "question_id", "condition_id"}
+    expressions = [
+        f"COALESCE(NULLIF(EXCLUDED.{column}, ''), oracle.oracle_events.{column})"
+        if column in enrichment else
+        f"COALESCE(EXCLUDED.{column}, oracle.oracle_events.{column})"
+        if column == "market_id" else f"EXCLUDED.{column}"
+        for column in columns[2:]
+    ]
+    updates = ", ".join(f"{column}={value}" for column, value in zip(columns[2:], expressions))
+    unchanged = ", ".join(f"oracle.oracle_events.{column}" for column in columns[2:])
     with conn.cursor() as cursor:
         cursor.executemany(
             f"""
             INSERT INTO oracle.oracle_events ({names}) VALUES ({values})
             ON CONFLICT (tx_hash, log_index) DO UPDATE SET {updates}
+            WHERE ROW({unchanged}) IS DISTINCT FROM ROW({', '.join(expressions)})
             """,
             rows,
         )
@@ -641,6 +709,78 @@ def _authorized(log: Mapping[str, Any]) -> bool:
     topics = log.get("topics") or []
     requester = _address(topics[1]) if len(topics) > 1 else ""
     return requester in REQUESTERS_BY_ORACLE.get(source, set())
+
+
+def reconcile_market_links(conn: Any, *, limit: int = 10_000) -> dict[str, int]:
+    """Retry a bounded, rotating page of orphans without moving chain cursors."""
+    if limit < 1:
+        raise ValueError("reconcile limit must be positive")
+    state_key = "oracle_market_reconciliation_v1"
+    if not conn.execute(
+        "SELECT pg_try_advisory_xact_lock(hashtext(%s)) AS locked", (state_key,),
+    ).fetchone()["locked"]:
+        return {"oracle_linked": 0, "adapter_linked": 0, "pass_complete": 1}
+    state = get_state(conn, state_key)
+    offsets = json.loads(state["value"]) if state and state.get("value") else {}
+    counts: dict[str, int] = {}
+    for table in ("oracle_events", "adapter_events"):
+        rows = conn.execute(
+            f"SELECT * FROM oracle.{table} WHERE market_id IS NULL AND id > %s "
+            "ORDER BY id LIMIT %s",
+            (int(offsets.get(table, 0)), limit),
+        ).fetchall()
+        # A complete pass wraps, so permanently unknown old markets cannot
+        # starve markets that arrive later. These IDs are not block cursors.
+        offsets[table] = int(rows[-1]["id"]) if len(rows) == limit else 0
+        keys = {}
+        if table == "oracle_events":
+            keys = {
+                int(row["id"]): "0x" + row["string_raw"].encode("utf-8").hex()
+                for row in rows if row.get("string_raw")
+                and row.get("source_oracle") != CTF
+                and not row.get("adapter_question_id")
+                and "\\x00" not in row["string_raw"] and "\ufffd" not in row["string_raw"]
+            }
+        adapter_map = _load_adapter_map(conn, keys.values())
+        questions = {}
+        for row in rows:
+            fallback = adapter_map.get(keys.get(int(row["id"]), ""), ("", ""))[0]
+            questions[int(row["id"])] = str(
+                row.get("adapter_question_id") or row.get("question_id") or fallback or ""
+            )
+        neg_map = _load_neg_map(conn, questions.values())
+        lookups = {
+            int(row["id"]): neg_map.get(questions[int(row["id"])], (questions[int(row["id"])], "", ""))[0]
+            if row.get("source_adapter") in NEG_RISK_ADAPTERS else questions[int(row["id"])]
+            for row in rows
+        }
+        markets = _load_markets(
+            conn, gamma_ids=(row.get("external_market_id") for row in rows),
+            condition_ids=(row.get("condition_id") for row in rows),
+            question_ids=lookups.values(),
+        )
+        updates = []
+        for row in rows:
+            condition = str(row.get("condition_id") or "").lower()
+            market = markets["condition"].get(condition)
+            if row.get("source_oracle") != CTF:
+                candidate, _ = _bridge(markets, str(row.get("external_market_id") or ""), lookups[int(row["id"])])
+                if market and candidate and market["id"] != candidate["id"]:
+                    continue
+                market = market or candidate
+            if market:
+                updates.append((market["id"], market.get("condition_id") or "", int(row["id"])))
+        with conn.cursor() as cursor:
+            provenance = ", matched_by='by_reconciled_market_identity'" if table == "oracle_events" else ""
+            cursor.executemany(
+                f"UPDATE oracle.{table} SET market_id=%s, "
+                f"condition_id=COALESCE(NULLIF(condition_id, ''), %s){provenance} "
+                "WHERE id=%s AND market_id IS NULL", updates,
+            )
+        counts["oracle_linked" if table == "oracle_events" else "adapter_linked"] = len(updates)
+    set_state(conn, state_key, value=offsets)
+    counts["pass_complete"] = int(not any(offsets.values()))
+    return counts
 
 
 def _decode_uma(log: Mapping[str, Any], event_time: datetime) -> dict[str, Any]:
@@ -733,26 +873,22 @@ def _updown_records(
     times: Mapping[int, datetime],
 ) -> list[dict[str, Any]]:
     decoded: list[tuple[Mapping[str, Any], str, dict[str, Any]]] = []
-    qids: list[str] = []
     conditions: list[str] = []
     for log in logs:
         status, abi = CTF_BY_TOPIC[_topic0(log)]
         args = _decode(abi, log)
         question = _hex(args["questionId"])[:66]
         condition = _hex(args["conditionId"])[:66]
-        qids.append(question)
         conditions.append(condition)
         decoded.append((log, status, args))
-    markets = _load_markets(conn, question_ids=qids, condition_ids=conditions, updown_only=True)
+    markets = _load_markets(conn, condition_ids=conditions)
     records: list[dict[str, Any]] = []
     for log, status, args in decoded:
         question = _hex(args["questionId"])[:66]
         condition = _hex(args["conditionId"])[:66]
         market, matched_by = _bridge(markets, "", condition)
-        if market is None:
-            market, matched_by = _bridge(markets, "", question)
-        if market is None:
-            continue
+        # The condition is the payout identity. Question IDs can be reused by
+        # different oracles; metadata availability must never filter chain logs.
         tx_hash = _hex(log.get("transactionHash"))
         oracle = _address(args.get("oracle"))
         payouts = args.get("payoutNumerators") or []
@@ -762,15 +898,15 @@ def _updown_records(
             "block_number": _int(log.get("blockNumber", 0)),
             "event_time": times[_int(log.get("blockNumber", 0))],
             "event_status": status,
-            "external_market_id": str(market.get("gamma_market_id") or ""),
-            "market_id": market.get("id"),
-            "market_title": str(market.get("title") or ""),
+            "external_market_id": str(market.get("gamma_market_id") or "") if market else "",
+            "market_id": market.get("id") if market else None,
+            "market_title": str(market.get("title") or "") if market else "",
             "source_adapter": oracle,
             "source_oracle": CTF,
             "adapter_question_id": question,
-            "matched_by": "by_updown_" + matched_by.removeprefix("by_"),
-            "question_id": str(market.get("question_id") or question),
-            "condition_id": str(market.get("condition_id") or condition),
+            "matched_by": "by_ctf_condition_id" if market else "",
+            "question_id": question,
+            "condition_id": condition,
             "string_raw": json.dumps({
                 "oracle": oracle,
                 "outcome_slot_count": int(args.get("outcomeSlotCount", 0)),
@@ -795,6 +931,7 @@ def collect_window(
     end: int,
     *,
     dry_run: bool = False,
+    uma_only: bool = False,
 ) -> dict[str, int]:
     current_adapters = [address for address in ADAPTER_STARTS if address != OLD_ADAPTER]
     current_topics = (CURRENT_INIT_TOPIC, RESET_TOPIC, CURRENT_RESOLVED_TOPIC)
@@ -803,7 +940,7 @@ def collect_window(
     adapter_logs += _fetch(rpc, start, end, (OLD_ADAPTER,), old_topics, ADAPTER_STARTS)
     prepared_logs = _fetch(rpc, start, end, NEG_RISK_OPERATORS, (PREPARED_TOPIC,))
     oracle_logs = _fetch(rpc, start, end, ORACLE_STARTS, UMA_BY_TOPIC, ORACLE_STARTS)
-    ctf_logs = _fetch(rpc, start, end, (CTF,), CTF_BY_TOPIC)
+    ctf_logs = [] if uma_only else _fetch(rpc, start, end, (CTF,), CTF_BY_TOPIC)
     all_logs = [*adapter_logs, *prepared_logs, *oracle_logs, *ctf_logs]
     times = _timestamps(rpc, all_logs)
 
@@ -865,6 +1002,12 @@ def collect_window(
         _write_adapter_events(conn, adapter_rows)
         _write_oracle_events(conn, [*oracle_rows, *updown_rows])
 
+    from market_data import oracle_modules
+
+    module_stats = {"module_events": 0} if uma_only else oracle_modules.collect_window(
+        rpc, conn, start, end, dry_run=dry_run,
+    )
+
     return {
         "from_block": start,
         "to_block": end,
@@ -874,14 +1017,16 @@ def collect_window(
         "uma_events": len(oracle_rows),
         "rejected_non_polymarket_uma": rejected,
         "updown_events": len(updown_rows),
+        "ctf_events": len(updown_rows),
+        "module_events": module_stats["module_events"],
     }
 
 
-def _state_keys(mode: str) -> tuple[str, str] | None:
+def _state_keys(mode: str, *, uma_only: bool = False) -> tuple[str, ...] | None:
     if mode == "live":
         return UMA_LIVE_KEY, UPDOWN_LIVE_KEY
     if mode == "backfill":
-        return UMA_BACKFILL_KEY, UPDOWN_BACKFILL_KEY
+        return (UMA_BACKFILL_KEY,) if uma_only else (UMA_BACKFILL_KEY, UPDOWN_BACKFILL_KEY)
     return None
 
 
@@ -897,10 +1042,11 @@ def _start_block(
     target: int,
     explicit: int | None,
     rewind: int,
+    uma_only: bool = False,
 ) -> int:
     if explicit is not None:
         return explicit
-    keys = _state_keys(mode)
+    keys = _state_keys(mode, uma_only=uma_only)
     if not keys:
         raise ValueError("bounded mode requires --from-block")
     cursors = [value for key in keys if (value := _state_block(conn, key)) is not None]
@@ -929,15 +1075,40 @@ def run(
     window_blocks: int = 1_000,
     max_windows: int = 10,
     dry_run: bool = False,
+    uma_only: bool = False,
     rpc: RpcClient | None = None,
     conn: Any = None,
 ) -> dict[str, int]:
-    if mode not in {"live", "bounded", "backfill"}:
+    if mode not in {"live", "bounded", "backfill", "reconcile"}:
         raise ValueError(f"unsupported oracle mode: {mode}")
+    if uma_only and mode not in {"bounded", "backfill"}:
+        raise ValueError("uma-only is restricted to bounded audits and historical backfill")
     if mode == "bounded" and (from_block is None or to_block is None):
         raise ValueError("bounded mode requires --from-block and --to-block")
     if window_blocks < 1 or max_windows < 0:
         raise ValueError("window-blocks must be positive and max-windows cannot be negative")
+    if mode == "reconcile":
+        database = conn or connect_postgres()
+        totals = {"oracle_linked": 0, "adapter_linked": 0, "batches": 0}
+        try:
+            while max_windows == 0 or totals["batches"] < max_windows:
+                stats = reconcile_market_links(database)
+                if dry_run:
+                    database.rollback()
+                else:
+                    database.commit()
+                totals["batches"] += 1
+                for key in ("oracle_linked", "adapter_linked"):
+                    totals[key] += stats[key]
+                if dry_run or stats["pass_complete"]:
+                    break
+            return totals
+        except Exception:
+            database.rollback()
+            raise
+        finally:
+            if conn is None:
+                database.close()
     own_rpc = rpc or RpcClient(polygon_rpc_urls("oracle"))
     chain_id = _int(own_rpc.call("eth_chainId"))
     if chain_id != POLYGON_CHAIN_ID:
@@ -948,22 +1119,33 @@ def run(
     try:
         if not dry_run:
             _ensure_schema(database)
+            from market_data.oracle_modules import ensure_schema as ensure_module_schema, observe_implementations
+
+            if not uma_only:
+                ensure_module_schema(database)
+                if mode == "live":
+                    observe_implementations(own_rpc, database, target)
             database.commit()
         start = _start_block(
             database, mode=mode, target=target, explicit=from_block, rewind=max(0, rewind),
+            uma_only=uma_only,
         )
         totals = {
             "from_block": start, "to_block": min(start - 1, target), "windows": 0,
             "logs_scanned": 0, "adapter_events": 0, "neg_risk_mappings": 0,
             "uma_events": 0, "rejected_non_polymarket_uma": 0, "updown_events": 0,
+            "ctf_events": 0,
+            "module_events": 0,
         }
         current = start
         while current <= target and (max_windows == 0 or totals["windows"] < max_windows):
             window_end = min(target, current + window_blocks - 1)
             try:
-                stats = collect_window(own_rpc, database, current, window_end, dry_run=dry_run)
+                stats = collect_window(
+                    own_rpc, database, current, window_end, dry_run=dry_run, uma_only=uma_only,
+                )
                 if not dry_run:
-                    keys = _state_keys(mode)
+                    keys = _state_keys(mode, uma_only=uma_only)
                     if keys:
                         for key in keys:
                             _advance(database, key, window_end, stats)
@@ -974,6 +1156,7 @@ def run(
                             # decisions so one stale legacy row cannot move the
                             # acquisition start point.
                             _advance(database, UMA_LIVENESS_KEY, window_end, stats)
+                            _advance(database, MODULES_LIVE_KEY, window_end, stats)
                     database.commit()
             except Exception:
                 database.rollback()
@@ -983,9 +1166,14 @@ def run(
             for key in (
                 "logs_scanned", "adapter_events", "neg_risk_mappings", "uma_events",
                 "rejected_non_polymarket_uma", "updown_events",
+                "ctf_events",
+                "module_events",
             ):
                 totals[key] += stats[key]
             current = window_end + 1
+        if not dry_run:
+            totals.update(reconcile_market_links(database))
+            database.commit()
         return totals
     finally:
         if own_conn:
@@ -993,7 +1181,7 @@ def run(
 
 
 def add_cli(parser: Any) -> None:
-    parser.add_argument("--mode", choices=("live", "bounded", "backfill"), default="live")
+    parser.add_argument("--mode", choices=("live", "bounded", "backfill", "reconcile"), default="live")
     parser.add_argument("--from-block", type=int)
     parser.add_argument("--to-block", type=int)
     parser.add_argument("--confirmations", type=int, default=CONFIRMATIONS)
@@ -1003,6 +1191,8 @@ def add_cli(parser: Any) -> None:
     parser.add_argument("--watch", action="store_true")
     parser.add_argument("--interval", type=float, default=30.0)
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--rpc-url", help="optional endpoint for this collector job only")
+    parser.add_argument("--uma-only", action="store_true", help="backfill/audit only UMA, adapters and NegRisk bridges")
     parser.set_defaults(handler=_cli)
 
 
@@ -1022,6 +1212,8 @@ def _cli(args: Any) -> int:
             window_blocks=args.window_blocks,
             max_windows=args.max_windows,
             dry_run=args.dry_run,
+            uma_only=args.uma_only,
+            rpc=RpcClient((args.rpc_url,)) if args.rpc_url else None,
         ), sort_keys=True))
 
     if args.watch:

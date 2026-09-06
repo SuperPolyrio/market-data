@@ -1,0 +1,11 @@
+[Unit]
+Description=Continue verified CTF repair through the current confirmed head
+
+[Timer]
+OnBootSec=2min
+OnUnitInactiveSec=1h
+Persistent=true
+Unit=polydata-oracle-ctf-backfill.service
+
+[Install]
+WantedBy=timers.target

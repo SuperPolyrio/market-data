@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from market_data import orderfilled
+from market_data import market, orderfilled
 
 
 def word(value: int) -> str:
@@ -376,3 +376,132 @@ def test_legacy_compat_cursor_advances_only_without_open_gaps(monkeypatch):
     conn.has_open = True
     assert orderfilled.advance_legacy_trade_cursor_if_complete(conn) is None
     assert len(writes) == 1
+
+
+@pytest.mark.parametrize("replay_outcome", ["success", "write_failure", "owner_missing"])
+def test_gap_closes_only_after_full_history_replay(monkeypatch, replay_outcome):
+    historical = orderfilled.decode_log(
+        log(
+            address=orderfilled.LEGACY_EXCHANGES[0],
+            topic0=orderfilled.LEGACY_TOPIC,
+            words=[0, 77, 2_000_000, 4_000_000, 1],
+            block=100,
+        )
+    )
+    fresh = {**historical, "block_number": 200, "tx_hash": "0x" + "33" * 32}
+    owner = {
+        "market_id": 7,
+        "condition_id": "0xcondition",
+        "outcome_index": 0,
+        "identity_kind": "canonical_gamma",
+    }
+    owners = {}
+    monkeypatch.setattr(orderfilled, "load_token_owners", lambda *_args: owners)
+
+    class Result:
+        def __init__(self, rows):
+            self.rows = rows
+
+        def fetchall(self):
+            return self.rows
+
+    class Conn:
+        status = None
+        commits = 0
+
+        def execute(self, query, params):
+            if "INSERT INTO ops.orderfilled_registry_gaps" in query:
+                self.status = "open"
+            elif "UPDATE ops.orderfilled_registry_gaps" in query:
+                self.status = "resolved"
+            elif "SELECT gap.token_id" in query:
+                return Result([{"token_id": "77"}] if self.status == "open" else [])
+            elif "FROM core.orderfilled_raw" in query:
+                assert params == (["77"],)
+                return Result([historical, fresh])
+            else:
+                raise AssertionError(query)
+
+        def commit(self):
+            self.commits += 1
+
+    class Writer:
+        fail = False
+
+        def __init__(self):
+            self.keys = set()
+
+        def write_facts(self, rows):
+            if self.fail:
+                raise RuntimeError("ClickHouse write failed")
+            keys = {orderfilled.event_key(row) for row in rows}
+            inserted = len(keys - self.keys)
+            self.keys.update(keys)
+            return inserted
+
+    conn, writer = Conn(), Writer()
+    orderfilled.project_rows(conn, writer, [historical])
+    assert conn.status == "open"
+    assert writer.keys == set()
+
+    owners["77"] = owner
+    orderfilled.project_rows(conn, writer, [fresh])
+    assert conn.status == "open"
+    assert writer.keys == {orderfilled.event_key(fresh)}
+    assert conn.commits == 2
+
+    writer.fail = replay_outcome == "write_failure"
+    if replay_outcome == "write_failure":
+        with pytest.raises(RuntimeError, match="ClickHouse write failed"):
+            orderfilled.retry_resolved_gaps(conn, writer, limit_tokens=1)
+        assert conn.status == "open"
+        assert conn.commits == 2
+    elif replay_outcome == "owner_missing":
+        owners.clear()
+        result = orderfilled.retry_resolved_gaps(conn, writer, limit_tokens=1)
+        assert result["unresolved"] == 2
+        assert conn.status == "open"
+        assert writer.keys == {orderfilled.event_key(fresh)}
+    else:
+        result = orderfilled.retry_resolved_gaps(conn, writer, limit_tokens=1)
+        assert result == {"tokens": 1, "raw": 2, "facts": 2, "inserted": 1, "unresolved": 0}
+        assert conn.status == "resolved"
+        assert conn.commits == 3
+        assert writer.keys == {orderfilled.event_key(historical), orderfilled.event_key(fresh)}
+
+
+def test_non_combo_gap_uses_bounded_official_gamma_lookup(monkeypatch):
+    class Rows:
+        def fetchall(self):
+            return [{"token_id": "77"}, {"token_id": "88"}]
+
+    class Conn:
+        commits = 0
+        rollbacks = 0
+
+        def execute(self, query, params):
+            if query.lstrip().startswith("SELECT"):
+                assert params == (orderfilled.V2026_EXCHANGES[-1], 2)
+                return Rows()
+            assert "gamma_lookup_pending" in query
+            assert params == (["77", "88"],)
+
+        def commit(self):
+            self.commits += 1
+
+        def rollback(self):
+            self.rollbacks += 1
+
+    calls = []
+    monkeypatch.setattr(
+        market,
+        "sync_gamma_markets_for_token_ids",
+        lambda tokens, *, conn: calls.append((tokens, conn)) or 1,
+    )
+    conn = Conn()
+
+    result = orderfilled.resolve_open_gamma_gaps(conn, limit_tokens=2)
+
+    assert result == {"attempted_tokens": 2, "persisted_markets": 1, "failed": 0}
+    assert calls == [(["77", "88"], conn)]
+    assert conn.commits == 1 and conn.rollbacks == 0

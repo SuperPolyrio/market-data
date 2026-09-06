@@ -89,6 +89,41 @@ def test_normalize_uses_official_tag_or_other_for_missing_category():
     assert untagged["category"] == "other"
 
 
+def test_normalize_duplicate_competitor_names_preserves_source_slots():
+    row = market.normalize_market(
+        gamma_market(outcomes=["Singh", "Singh"], outcomePrices=["1", "0"])
+    )
+    assert row["outcomes"] == ["Singh", "Singh"]
+    assert row["yes_token_id"] == "token-no"
+    assert row["no_token_id"] == "token-yes"
+    assert (row["yes_source_index"], row["no_source_index"]) == (0, 1)
+    assert (row["yes_price"], row["no_price"]) == ("1", "0")
+
+
+@pytest.mark.parametrize("complete,dry_run,expected", [(True, False, 1), (False, False, 0), (True, True, 0)])
+def test_completed_revisit_retries_old_normalization_failures(
+    monkeypatch, complete, dry_run, expected
+):
+    from market_data import market_recovery
+    from market_data.cli import build_parser
+
+    calls = []
+    monkeypatch.setattr(
+        market, "run_once", lambda **kwargs: {"lanes": [{"complete": complete}]}
+    )
+    recovery_result = {"resolved": 1, "results": [{"source_identity": "123"}]}
+    monkeypatch.setattr(
+        market_recovery, "retry_normalization_failures",
+        lambda: calls.append("recovery") or recovery_result,
+    )
+    argv = ["market", "revisit"] + (["--dry-run"] if dry_run else [])
+    args = build_parser("market").parse_args(argv)
+    assert args.handler(args) == 0
+    assert len(calls) == expected
+    if expected:
+        assert "results" not in recovery_result
+
+
 def test_normalize_accepts_gamma_variable_fractional_timestamp():
     row = market.normalize_market(gamma_market(createdAt="2026-09-06T02:21:21.53177Z"))
 
@@ -1205,6 +1240,45 @@ class ExactConn:
                 ]
             )
         raise AssertionError(sql)
+
+
+@pytest.mark.parametrize("existing_market", [True, False])
+def test_upsert_reuses_verified_id_before_alias_guard(monkeypatch, existing_market):
+    class GuardedConn(ExactConn):
+        def execute(self, sql, params=None):
+            if not existing_market and "id AS market_id" in sql:
+                return Rows([])
+            return super().execute(sql, params)
+
+    written = []
+
+    def guarded_write(_conn, sql, rows):
+        rows = list(rows)
+        if sql == market.MARKET_UPSERT:
+            for row in rows:
+                # PostgreSQL evaluates this INSERT id and its BEFORE INSERT
+                # guard before looking up the ON CONFLICT condition owner.
+                inserted_id = (
+                    row.get("existing_market_id")
+                    if "COALESCE(%(existing_market_id)s," in sql
+                    else None
+                )
+                inserted_id = inserted_id if inserted_id is not None else 9001
+                if existing_market and inserted_id != 7:
+                    raise RuntimeError(
+                        "market gamma identity conflicts with immutable alias ownership"
+                    )
+            written.extend(rows)
+        return len(rows)
+
+    monkeypatch.setattr(market, "execute_values", guarded_write)
+    row = market.normalize_market(gamma_market())
+    row["existing_market_id"] = 999  # Caller data must never choose registry IDs.
+
+    assert market.upsert_markets(GuardedConn(), [row]) == 1
+    assert written[0]["existing_market_id"] == (7 if existing_market else None)
+    assert row["existing_market_id"] == 999
+    assert "nextval('core.markets_id_seq')" in market.MARKET_UPSERT
 
 
 def test_upsert_uses_compatible_deterministic_negative_token_ids(monkeypatch):

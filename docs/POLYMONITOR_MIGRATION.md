@@ -14,8 +14,9 @@ Cutover date: 2026-09-06 (Asia/Shanghai).
 
 OrderFilled stores only immutable chain raw and BUY/SELL facts. It does not
 write cashflow, PnL or positions. Unknown tokens remain in the durable registry
-gap queue until official Market or combo evidence supplies an owner; the
-collector never creates placeholders.
+gap queue until official Market or combo evidence supplies an owner. Non-combo
+gaps use a bounded, rate-limited official Gamma token lookup before replay;
+the collector never creates placeholders.
 
 Consumers keep using the existing PostgreSQL and ClickHouse contracts. They
 may import the installed `market_data` package for the small canonical Gamma
@@ -29,6 +30,8 @@ token lookup helper, but must not import the retired polymonitor collectors.
 - `polydata-market-backfill.timer`
 - `polydata-market-revisit.timer`
 - `polydata-oracle-backfill.timer`
+- `polydata-oracle-ctf-backfill.timer`
+- `polydata-oracle-modules-backfill.timer`
 
 The unit templates in `deploy/systemd/acquisition` run this repository's
 `.venv/bin/python`, set `PYTHONDONTWRITEBYTECODE=1`, and share the existing
@@ -85,11 +88,16 @@ proof is observed. Exact evidence promotes that row to `official_combo`; no
 Gamma or question ID is fabricated. Historical placeholder/ghost rows may stay
 as audit identities, but collectors and canonical consumers exclude them.
 
+The retired Polymonitor acquisition entrypoints and their systemd units have
+been removed after consumer imports were switched to this package. The old
+cashflow, placeholder-remap and position-snapshot units are not part of the
+collector target.
+
 ## Install and rollback
 
 Create the repository virtual environment, install this package, render
 `/__MARKET_DATA_ROOT__` in the unit templates to the absolute checkout, then
-enable the three live units and three timers above. Server-side Python
+enable the three live units and five timers above. Server-side Python
 consumers should install the repository editable with `--no-deps` so imports
 resolve to this checkout.
 
@@ -103,5 +111,5 @@ writer together.
 - OrderFilled: raw and fact cursors near finalized head, exact bounded raw/fact
   keys and fields, zero open registry gaps, zero incomplete windows.
 - Oracle: both UMA and UpDown live cursors near finalized head.
-- Full history: terminal Market and Oracle backfill receipts, assessed
-  separately from live health.
+- Full history: terminal Market, UMA, CTF and V2-module backfill receipts,
+  assessed separately from live health.

@@ -1,0 +1,11 @@
+[Unit]
+Description=Continue verified module history through the confirmed head
+
+[Timer]
+OnBootSec=2min
+OnUnitInactiveSec=1h
+Persistent=true
+Unit=polydata-oracle-modules-backfill.service
+
+[Install]
+WantedBy=timers.target

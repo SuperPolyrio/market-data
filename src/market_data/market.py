@@ -53,13 +53,14 @@ class TokenOwnershipConflict(RuntimeError):
 
 MARKET_UPSERT = """
 INSERT INTO core.markets (
-    identity_kind, gamma_market_id, event_id, event_slug, event_title,
+    id, identity_kind, gamma_market_id, event_id, event_slug, event_title,
     slug, condition_id, question_id, oracle, yes_token_id, no_token_id,
     title, description, enable_neg_risk, end_date, raw_end_date,
     created_at, raw_created_at, category, tags, clob_token_ids,
     active, closed, accepting_orders, enable_order_book,
     gamma_updated_at, market_state_observed_at, migrated_at
 ) VALUES (
+    COALESCE(%(existing_market_id)s, nextval('core.markets_id_seq')),
     'canonical_gamma', %(gamma_market_id)s, %(event_id)s, %(event_slug)s,
     %(event_title)s, %(slug)s, %(condition_id)s, %(question_id)s, %(oracle)s,
     %(yes_token_id)s, %(no_token_id)s, %(title)s, %(description)s,
@@ -149,7 +150,7 @@ INSERT INTO ops.market_acquisition_failures (
 ON CONFLICT (failure_key) DO UPDATE SET
     reason=EXCLUDED.reason,
     raw_json=EXCLUDED.raw_json,
-    detail=EXCLUDED.detail,
+    detail=ops.market_acquisition_failures.detail || EXCLUDED.detail,
     status=CASE
         WHEN left(ops.market_acquisition_failures.status, 9) = 'terminal_'
         THEN ops.market_acquisition_failures.status
@@ -461,14 +462,14 @@ def normalize_market(
     ]
     if len(token_ids) != 2 or not all(token_ids) or token_ids[0] == token_ids[1]:
         raise ValueError("clobTokenIds must contain two distinct non-empty tokens")
-    if (
-        len(outcomes) != 2
-        or not all(outcomes)
-        or outcomes[0].casefold() == outcomes[1].casefold()
-    ):
-        raise ValueError("outcomes must contain two distinct non-empty labels")
-
+    if len(outcomes) != 2 or not all(outcomes):
+        raise ValueError("outcomes must contain two non-empty labels")
     labels = [label.upper() for label in outcomes]
+    # Different competitors can share a display name (e.g. Singh vs Singh).
+    # Their distinct tokens and source slots identify the outcomes; never
+    # infer a YES/NO or UP/DOWN mapping from repeated logical labels.
+    if labels[0] == labels[1] and labels[0] in {"YES", "NO", "UP", "DOWN"}:
+        raise ValueError("outcomes must contain two distinct non-empty labels")
     if set(labels) == {"YES", "NO"}:
         yes_index, no_index = labels.index("YES"), labels.index("NO")
     elif set(labels) == {"UP", "DOWN"}:
@@ -920,9 +921,11 @@ def upsert_markets(
         """,
         (list(rows_by_condition),),
     ).fetchall()
+    existing_market_ids: dict[str, int] = {}
     condition_conflicts = []
     for raw_owner in existing_markets:
         owner = _market_owner(raw_owner)
+        existing_market_ids[owner["condition_id"]] = owner["market_id"]
         attempted = rows_by_condition[owner["condition_id"]]
         if owner["identity_kind"] == "canonical_gamma" and owner[
             "gamma_market_id"
@@ -996,7 +999,18 @@ def upsert_markets(
             f"refusing to rebind {len(ownership_conflicts)} token(s): "
             f"{json.dumps(ownership_conflicts[:5], sort_keys=True)}"
         )
-    execute_values(conn, MARKET_UPSERT, rows)
+    # BEFORE INSERT alias guards run before ON CONFLICT resolves the owner.
+    # Reuse its verified id so a refresh is not mistaken for a third owner.
+    write_rows = [
+        {
+            **row,
+            "existing_market_id": existing_market_ids.get(
+                str(row["condition_id"]).lower()
+            ),
+        }
+        for row in rows
+    ]
+    execute_values(conn, MARKET_UPSERT, write_rows)
     condition_ids = [row["condition_id"] for row in rows]
     stored = conn.execute(
         "SELECT id, condition_id FROM core.markets WHERE condition_id = ANY(%s)",
@@ -1747,6 +1761,14 @@ def _handle_identity_classification(args: argparse.Namespace) -> int:
     return 0
 
 
+def _handle_recovery(args: argparse.Namespace) -> int:
+    from market_data.market_recovery import retry_normalization_failures
+
+    result = retry_normalization_failures(limit=args.limit, dry_run=args.dry_run)
+    print(json.dumps(result, ensure_ascii=False, sort_keys=True, default=str), flush=True)
+    return 0
+
+
 def _handle(args: argparse.Namespace) -> int:
     def collect() -> dict[str, Any]:
         result = run_once(
@@ -1756,6 +1778,18 @@ def _handle(args: argparse.Namespace) -> int:
             since=_parse_since(getattr(args, "since", None)),
             overlap_minutes=args.overlap_minutes,
         )
+        if (
+            args.market_mode == "revisit"
+            and not args.dry_run
+            and all(lane["complete"] for lane in result["lanes"])
+        ):
+            from market_data.market_recovery import retry_normalization_failures
+
+            recovery = retry_normalization_failures()
+            # Per-market evidence is in the ledger; a bounded summary keeps
+            # the systemd JSON receipt below journald's line-size limit.
+            recovery.pop("results", None)
+            result["normalization_recovery"] = recovery
         print(
             json.dumps(result, ensure_ascii=False, sort_keys=True, default=str),
             flush=True,
@@ -1798,6 +1832,12 @@ def add_cli(parser: argparse.ArgumentParser) -> None:
                 "--since", help="initial UTC ISO watermark; default is 24h ago"
             )
         command.set_defaults(handler=_handle)
+    recovery = modes.add_parser(
+        "retry-failures", help="recheck bounded open normalization failures by Gamma ID"
+    )
+    recovery.add_argument("--limit", type=int, default=200)
+    recovery.add_argument("--dry-run", action="store_true")
+    recovery.set_defaults(handler=_handle_recovery)
     classify = modes.add_parser(
         "classify-identities",
         help="dry-run or apply truthful legacy shell identity labels",

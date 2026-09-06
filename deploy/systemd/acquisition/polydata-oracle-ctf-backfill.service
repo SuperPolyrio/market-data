@@ -1,5 +1,5 @@
 [Unit]
-Description=Polymarket resumable full Oracle backfill slice
+Description=Polymarket complete CTF history repair with verified window receipts
 After=network-online.target
 Wants=network-online.target
 
@@ -11,7 +11,8 @@ Environment=PYTHONPATH=/__MARKET_DATA_ROOT__/src
 Environment=PYTHONUNBUFFERED=1
 Environment=PYTHONDONTWRITEBYTECODE=1
 Environment=POLYDATA_ORACLE_FALLBACK_RPC_URL=https://polygon.gateway.tenderly.co
-ExecStart=/bin/bash -lc 'exec /__MARKET_DATA_ROOT__/.venv/bin/python -m market_data oracle --mode backfill --uma-only --window-blocks "${POLYDATA_ORACLE_BACKFILL_WINDOW_BLOCKS:-10000}" --max-windows "${POLYDATA_ORACLE_BACKFILL_MAX_WINDOWS:-1000}" --rpc-url https://polygon.gateway.tenderly.co'
+ExecStart=/__MARKET_DATA_ROOT__/.venv/bin/python -m market_data.oracle_repair --apply --window-blocks 1000000 --rpc-url https://polygon.gateway.tenderly.co
 TimeoutStartSec=infinity
 Restart=on-failure
 RestartSec=60
+Nice=10

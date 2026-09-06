@@ -634,13 +634,21 @@ class ClickHouseWriter:
 
 
 def project_rows(
-    conn: Any, writer: ClickHouseWriter, raw_rows: Sequence[Mapping[str, Any]]
+    conn: Any,
+    writer: ClickHouseWriter,
+    raw_rows: Sequence[Mapping[str, Any]],
+    *,
+    resolve_gaps: bool = False,
 ) -> dict[str, int]:
     owners = load_token_owners(conn, (str(row["token_id"]) for row in raw_rows))
     facts, unresolved = build_projection(raw_rows, owners)
     queue_unresolved(conn, unresolved)
     inserted = writer.write_facts(facts)
-    mark_resolved(conn, {str(row["token_id"]): owners[str(row["token_id"])] for row in facts})
+    if resolve_gaps:
+        # Only a replay of the token's full raw history can close its gap.
+        unresolved_tokens = {str(row["token_id"]) for row in unresolved}
+        resolved_tokens = {str(row["token_id"]) for row in facts} - unresolved_tokens
+        mark_resolved(conn, {token_id: owners[token_id] for token_id in resolved_tokens})
     conn.commit()
     return {"raw": len(raw_rows), "facts": len(facts), "inserted": inserted, "unresolved": len(unresolved)}
 
@@ -688,7 +696,7 @@ def retry_resolved_gaps(
         """,
         (tokens,),
     ).fetchall()
-    result = project_rows(conn, writer, [dict(row) for row in rows])
+    result = project_rows(conn, writer, [dict(row) for row in rows], resolve_gaps=True)
     return {"tokens": len(tokens), **result}
 
 
@@ -749,6 +757,60 @@ def resolve_open_combo_gaps(conn: Any, *, limit_tokens: int) -> dict[str, int]:
         "resolved_conditions": resolved,
         "failed_conditions": failed,
     }
+
+
+def resolve_open_gamma_gaps(conn: Any, *, limit_tokens: int) -> dict[str, int]:
+    """Resolve non-combo gaps through the official Gamma token lookup."""
+
+    empty = {"attempted_tokens": 0, "persisted_markets": 0, "failed": 0}
+    if limit_tokens <= 0:
+        return empty
+    rows = conn.execute(
+        """
+        SELECT gap.token_id
+        FROM ops.orderfilled_registry_gaps AS gap
+        WHERE gap.status='open'
+          AND EXISTS (
+              SELECT 1 FROM core.orderfilled_raw AS raw
+              WHERE raw.token_id=gap.token_id AND lower(raw.contract)<>%s
+          )
+          AND (
+              gap.note IS DISTINCT FROM 'gamma_lookup_pending'
+              OR gap.updated_at <= now() - interval '60 seconds'
+          )
+        ORDER BY gap.first_seen_block, gap.token_id
+        LIMIT %s
+        """,
+        (V2026_EXCHANGES[-1], limit_tokens),
+    ).fetchall()
+    tokens = [str(row["token_id"]) for row in rows]
+    if not tokens:
+        return empty
+    conn.execute(
+        """
+        UPDATE ops.orderfilled_registry_gaps
+        SET note='gamma_lookup_pending', updated_at=now()
+        WHERE status='open' AND token_id=ANY(%s)
+        """,
+        (tokens,),
+    )
+    conn.commit()
+    try:
+        from market_data.market import sync_gamma_markets_for_token_ids
+
+        persisted = sync_gamma_markets_for_token_ids(tokens, conn=conn)
+        return {
+            "attempted_tokens": len(tokens),
+            "persisted_markets": persisted,
+            "failed": 0,
+        }
+    except Exception as exc:
+        conn.rollback()
+        print(
+            f"Gamma token lookup deferred: {type(exc).__name__}: {str(exc)[:180]}",
+            flush=True,
+        )
+        return {"attempted_tokens": len(tokens), "persisted_markets": 0, "failed": 1}
 
 
 def advance_legacy_trade_cursor_if_complete(conn: Any) -> int | None:
@@ -967,6 +1029,9 @@ def run(args: argparse.Namespace) -> int:
             combo_resolution = resolve_open_combo_gaps(
                 conn, limit_tokens=args.retry_unresolved_tokens
             )
+            gamma_resolution = resolve_open_gamma_gaps(
+                conn, limit_tokens=args.retry_unresolved_tokens
+            )
             retried = retry_resolved_gaps(
                 conn, writer, limit_tokens=args.retry_unresolved_tokens
             )
@@ -979,6 +1044,13 @@ def run(args: argparse.Namespace) -> int:
             print(
                 json.dumps(
                     {"status": "resolved_official_combos", **combo_resolution},
+                    sort_keys=True,
+                )
+            )
+        if not bounded_backfill and gamma_resolution["attempted_tokens"]:
+            print(
+                json.dumps(
+                    {"status": "resolved_official_gamma", **gamma_resolution},
                     sort_keys=True,
                 )
             )
@@ -1047,6 +1119,7 @@ __all__ = [
     "build_projection",
     "project_rows",
     "resolve_open_combo_gaps",
+    "resolve_open_gamma_gaps",
     "advance_legacy_trade_cursor_if_complete",
     "add_cli",
 ]

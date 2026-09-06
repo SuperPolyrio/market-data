@@ -251,3 +251,78 @@ def test_runtime_ddl_and_projection_sql_have_one_key_clause():
     assert inspect.getsource(oracle.collect_window).count(
         '_bridge(lifecycle_markets, "", lookup)'
     ) == 1
+
+
+@pytest.mark.parametrize('abi,plain,status,payout', [
+    (oracle.CONDITION_PREPARATION, [2], 'request', ''),
+    (oracle.CONDITION_RESOLUTION, [2, [1, 1]], 'settle', '[1, 1]'),
+])
+def test_ctf_events_survive_late_or_missing_market(monkeypatch, abi, plain, status, payout):
+    question = bytes.fromhex('88' * 32)
+    condition = bytes.fromhex('77' * 32)
+    log = _log(abi, [condition, '0x' + '99' * 20, question], plain, address=oracle.CTF)
+    monkeypatch.setattr(oracle, '_load_markets', lambda *_a, **_k: oracle._market_index(()))
+    rows = oracle._updown_records(object(), [log], {100: datetime(2026, 1, 1, tzinfo=timezone.utc)})
+    assert len(rows) == 1
+    assert rows[0]['market_id'] is None
+    assert rows[0]['event_status'] == status
+    assert rows[0]['condition_id'] == '0x' + condition.hex()
+    assert rows[0]['question_id'] == '0x' + question.hex()
+    assert rows[0]['payout'] == payout
+
+
+def test_ctf_condition_cannot_be_replaced_by_shared_question(monkeypatch):
+    question = bytes.fromhex('88' * 32)
+    condition = bytes.fromhex('77' * 32)
+    log = _log(oracle.CONDITION_PREPARATION,
+               [condition, '0x' + '99' * 20, question], [2], address=oracle.CTF)
+    other = {'id': 7, 'question_id': '0x' + question.hex(), 'condition_id': '0x' + '66' * 32}
+    monkeypatch.setattr(oracle, '_load_markets', lambda *_a, **_k: oracle._market_index([other]))
+    row = oracle._updown_records(object(), [log], {100: datetime(2026, 1, 1, tzinfo=timezone.utc)})[0]
+    assert row['market_id'] is None
+    assert row['condition_id'] == '0x' + condition.hex()
+
+
+def test_fetch_splits_provider_limits_but_propagates_transport_failure():
+    class LimitedRpc:
+        def logs(self, start, end, **_kwargs):
+            if start != end:
+                raise ConnectionError('Query returned more than 50000 results')
+            return [{'blockNumber': hex(start), 'removed': False}]
+    assert [r['blockNumber'] for r in oracle._fetch(LimitedRpc(), 1, 4, [oracle.CTF], oracle.CTF_BY_TOPIC)] == ['0x1', '0x2', '0x3', '0x4']
+    class UnavailableRpc:
+        def logs(self, *_args, **_kwargs):
+            raise ConnectionError('upstream unavailable')
+    with pytest.raises(ConnectionError, match='upstream unavailable'):
+        oracle._fetch(UnavailableRpc(), 1, 4, [oracle.CTF], oracle.CTF_BY_TOPIC)
+
+
+def test_log_timestamps_reuse_metadata_and_fetch_only_missing_headers():
+    class Rpc:
+        def blocks(self, numbers):
+            assert numbers == [2]
+            return [{'number': '0x2', 'timestamp': '0x66', 'hash': '0xbb'}]
+    logs = [
+        {'blockNumber': '0x1', 'blockTimestamp': '0x65', 'blockHash': '0xaa'},
+        {'blockNumber': '0x1', 'blockTimestamp': '0x65', 'blockHash': '0xaa'},
+        {'blockNumber': '0x2', 'blockHash': '0xbb'},
+    ]
+    assert {k:int(v.timestamp()) for k,v in oracle._timestamps(Rpc(), logs).items()} == {1:101, 2:102}
+    logs[1]['blockTimestamp'] = '0x67'
+    with pytest.raises(RuntimeError, match='conflicting Polygon block timestamp'):
+        oracle._timestamps(Rpc(), logs)
+    logs[1]['blockTimestamp'] = '0x65'
+    logs[1]['blockHash'] = '0xcc'
+    with pytest.raises(RuntimeError, match='conflicting Polygon block hashes'):
+        oracle._timestamps(Rpc(), logs)
+
+
+def test_uma_backfill_never_advances_independent_ctf_or_module_cursors(monkeypatch):
+    assert oracle._state_keys('backfill', uma_only=True) == (oracle.UMA_BACKFILL_KEY,)
+    states = {oracle.UMA_BACKFILL_KEY: {'last_block': 80_000_000},
+              oracle.UPDOWN_BACKFILL_KEY: {'last_block': 79_000_000}}
+    monkeypatch.setattr(oracle, 'get_state', lambda _c, k: states.get(k))
+    assert oracle._start_block(object(), mode='backfill', target=90_000_000,
+                              explicit=None, rewind=100, uma_only=True) == 80_000_001
+    with pytest.raises(ValueError, match='uma-only is restricted'):
+        oracle.run(mode='live', uma_only=True)
