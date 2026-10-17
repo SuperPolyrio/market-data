@@ -10,7 +10,7 @@ import pytest
 
 from lobv2.archive import (DirectoryStore, build_archive, commit_archive, evict, footer_of,
                           progress, read_archive, restore, verify_archive)
-from lobv2.book import SourceBook, apply, decimal, digest
+from lobv2.book import SourceBook, apply, decimal, digest, state_view
 from lobv2.catalog import identity, shards, validate_scope
 from lobv2.core import Gateway, Plant
 from lobv2.journal import Journal, read_journal, recover_open
@@ -111,10 +111,10 @@ def test_T07_T08_T09_T10_source_switch_is_full_reset(tmp_path):
         initialize(p,1)
         feed(p,change("30"),0,3)
         feed(p,change("20"),1,3)
-        assert p.working["m"]["1"]["bids"]==[["0.5","30"]]
+        assert state_view(p.working["m"])["1"]["bids"]==[["0.5","30"]]
         p.disconnect(0,0,"c0","FAIL")
-        assert p.working["m"]["1"]["bids"]==[["0.5","20"]]
-        assert p.working["m"]["2"]["ready"]
+        assert state_view(p.working["m"])["1"]["bids"]==[["0.5","20"]]
+        assert state_view(p.working["m"])["2"]["ready"]
         await p.journal.close()
         emits=[r for r in read_journal(next((tmp_path/"P").glob("*.journal"))) if r.kind=="PLANT_EMIT"]
         reset=emits[-1].body
@@ -161,11 +161,11 @@ def test_T03_T04_T05_T24_T25_transport_identity_and_durability(tmp_path):
         g.accept("P","s",rec)
         for _ in range(10): assert not g.accept("P","s",rec)
         assert g.accepted==1 and g.retries==10
-        assert g.committed["m"]["1"]["bids"]==[["0.5","10"]]
+        assert state_view(g.committed["m"])["1"]["bids"]==[["0.5","10"]]
         bad=encode(rec.kind,rec.producer,rec.stream,rec.offset,{**rec.body,"x":True})
         with pytest.raises(ValueError,match="CONFLICT"): g.accept("P","s",bad)
         await g.journal.sync()
-        assert g.committed["m"]["1"]["bids"]==[["0.5","15"]]
+        assert state_view(g.committed["m"])["1"]["bids"]==[["0.5","15"]]
         await p.journal.close(); await g.journal.close()
     asyncio.run(run())
 
@@ -181,7 +181,7 @@ def test_T19_T20_T22_T41_bootstrap_cut_and_filtered_offsets(tmp_path):
         assert snapshot["items"][0]["cut"]==cut
         assert snapshot["items"][0]["assets"]["1"]["bids"]==[["0.5","10"]]
         assert snapshot["snapshot_id"]!=p.journal.stream
-        assert p.working["m"]["1"]["bids"]==[["0.5","29"]]
+        assert state_view(p.working["m"])["1"]["bids"]==[["0.5","29"]]
         await p.journal.sync()
         records=[decode(await sub["queue"].get()) for _ in range(10)]
         assert [r.body["market_seq"] for r in records]==list(range(cut+1,cut+11))
@@ -230,7 +230,7 @@ def test_T27_T46_stale_sessions_and_new_bootstrap(tmp_path):
         with pytest.raises(ValueError,match="STALE"): g.accept("P","old",rec)
         snapshot2,_=p.bootstrap()
         g.snapshot("P","new",snapshot2)
-        assert g.working["m"]["1"]["bids"]==[["0.5","15"]]
+        assert state_view(g.working["m"])["1"]["bids"]==[["0.5","15"]]
         with pytest.raises(ValueError,match="RESET_REQUIRED"): g.accept("P","new",rec)
         await p.journal.close(); await g.journal.close()
     asyncio.run(run())
@@ -304,6 +304,7 @@ def test_T44_segment_rotation_before_full_record(tmp_path):
         j=Journal(tmp_path,"P","capture",segment_bytes=MAX_RECORD+65536)
         j.append("RAW",{},os.urandom(9*1024*1024))
         j.append("RAW",{},os.urandom(9*1024*1024))
+        await j.sync()
         assert list(tmp_path.glob("*.journal"))
         await j.close()
         paths=list(tmp_path.glob("*.journal"))
@@ -414,7 +415,7 @@ def test_T38_clock_rollback_preserves_source_order_and_monotonic_latency(tmp_pat
         feed(p,change("11"),seq=3)
         feed(p,change("12"),seq=4)
         await p.journal.sync()
-        assert p.committed["m"]["1"]["bids"]==[["0.5","12"]]
+        assert state_view(p.committed["m"])["1"]["bids"]==[["0.5","12"]]
         assert all(value>=0 for value in p.latencies_ms)
         await p.journal.close()
     asyncio.run(run())
@@ -558,7 +559,7 @@ def test_gateway_rejects_wrong_stream_partial_reset_and_unannounced_route(tmp_pa
         with pytest.raises(ValueError,match="GENERATION"):g.accept("P","s",wrong)
         badroute=encode(rec.kind,"P",rec.stream,rec.offset,{**rec.body,"route":{**rec.body["route"],"lane":1}})
         with pytest.raises(ValueError,match="ROUTE_CHANGED"):g.accept("P","s",badroute)
-        badreset=encode(rec.kind,"P",rec.stream,rec.offset,{**rec.body,"kind":"SOURCE_RESET","scope":"MARKET","assets":{"1":p.committed["m"]["1"]}})
+        badreset=encode(rec.kind,"P",rec.stream,rec.offset,{**rec.body,"kind":"SOURCE_RESET","scope":"MARKET","assets":{"1":state_view(p.committed["m"])["1"]}})
         with pytest.raises(ValueError,match="INCOMPLETE"):g.accept("P","s",badreset)
         assert g.accepted==0
         assert g.accept("P","s",rec)
@@ -599,7 +600,7 @@ def test_batched_transport_delivers_all_groups_with_one_flow_credit_per_batch(tm
             await asyncio.sleep(.01)
         assert g.seq["m"]==301 and g.accepted==300
         await g.journal.sync()
-        assert g.committed["m"]["1"]["bids"]==[["0.5","302"]]
+        assert state_view(g.committed["m"])["1"]["bids"]==[["0.5","302"]]
         stop.set();session.cancel();await asyncio.gather(session,return_exceptions=True);await server
         await p.journal.close();await g.journal.close()
     asyncio.run(run())

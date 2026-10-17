@@ -1,11 +1,12 @@
 """One protobuf envelope, one encoding, reused by journal and transport."""
 import asyncio
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import hashlib
 import json
 from pathlib import Path
 import struct
 import time
+from collections import deque
 
 import google_crc32c
 from google.protobuf import descriptor_pb2, descriptor_pool, message_factory
@@ -57,14 +58,16 @@ class Record:
     raw: bytes
     created_ns: int
     frame: bytes
+    prepared: object = field(default=None, compare=False, repr=False)
+    trace: dict = field(default_factory=dict, compare=False, repr=False)
 
 
-def encode(kind, producer, stream, offset, body, raw=b"", created_ns=None):
+def encode(kind, producer, stream, offset, body, raw=b"", created_ns=None, prepared=None):
     created_ns = time.time_ns() if created_ns is None else created_ns
     env = Envelope(schema_version=2, kind=kind, producer=producer, stream=stream,
                    offset=offset, created_utc_ns=created_ns, body=json_bytes(body), raw=raw)
     return Record(kind, producer, stream, offset, body, raw, created_ns,
-                  frame(env.SerializeToString(deterministic=True)))
+                  frame(env.SerializeToString(deterministic=True)), prepared)
 
 
 def decode(data):
@@ -104,12 +107,17 @@ class ByteQueue:
         self.high_water = 0
         self.queue = asyncio.Queue(maxsize=max_items)
         self.failed = False
+        self.arrivals = deque()
+        self.enqueued_items = self.enqueued_bytes = self.dequeued_items = self.dequeued_bytes = 0
 
     def put(self, data):
         if self.failed or self.bytes + len(data) > self.limit or self.queue.full():
             self.failed = True
             raise BufferError("RESYNC_REQUIRED")
         self.queue.put_nowait(data)
+        self.arrivals.append(time.monotonic_ns())
+        self.enqueued_items += 1
+        self.enqueued_bytes += len(data)
         self.bytes += len(data)
         self.high_water = max(self.bytes, self.high_water)
 
@@ -117,6 +125,9 @@ class ByteQueue:
         if self.failed:
             raise BufferError("RESYNC_REQUIRED")
         data = await self.queue.get()
+        self.arrivals.popleft()
+        self.dequeued_items += 1
+        self.dequeued_bytes += len(data)
         self.bytes -= len(data)
         return data
 
@@ -124,5 +135,8 @@ class ByteQueue:
         if self.failed:
             raise BufferError("RESYNC_REQUIRED")
         data=self.queue.get_nowait()
+        self.arrivals.popleft()
+        self.dequeued_items += 1
+        self.dequeued_bytes += len(data)
         self.bytes-=len(data)
         return data

@@ -8,6 +8,30 @@ from pathlib import Path
 import time
 import hashlib
 import tempfile
+from contextlib import contextmanager
+
+
+@contextmanager
+def archive_slot(config,store):
+    """Bound compression+verification too, before taking a network RPC slot."""
+    settings=config.get("ssh_store",{})
+    directory=Path(settings.get("lock_root",config.get("resource_lock_root","/tmp/lob-v2-archive-budget")))/"jobs"
+    directory.mkdir(parents=True,exist_ok=True)
+    slots=[(directory/str(i)).open("a") for i in range(config.get("job_concurrency",4))]
+    try:
+        while True:
+            if getattr(store,"cancelled",lambda:False)():
+                raise OSError("ARCHIVE_SHUTDOWN_LOCAL_RETAINED")
+            for lock in slots:
+                try:
+                    fcntl.flock(lock.fileno(),fcntl.LOCK_EX|fcntl.LOCK_NB)
+                except BlockingIOError:
+                    continue
+                yield
+                return
+            time.sleep(.05)
+    finally:
+        for lock in slots:lock.close()
 
 
 class SSHStore:

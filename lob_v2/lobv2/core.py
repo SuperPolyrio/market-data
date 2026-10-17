@@ -5,7 +5,7 @@ import json
 import time
 import uuid
 
-from .book import SourceBook, apply, inspect
+from .book import SourceBook, apply_state as apply, inspect, state_view, prepare_record, ChangeGroup, uncrossed
 from .wire import ByteQueue
 
 POLICY = "single_healthy_route_v2.0.1"
@@ -31,6 +31,10 @@ class Owner:
             self.epochs[market] = self.epochs.get(market, 0) + 1
             self.routes[market] = deepcopy(route)
             self.resets += 1
+            event = {**event,"reset_identity":{"owner_generation":self.journal.stream,
+                "reset_request_id":str(uuid.uuid4()),"source_session":route.get("connection",route.get("plant_session_id")),
+                "source_epoch":route.get("connection_epoch"),"input_cut":event.get("input_cut",event.get("plant_cut")),
+                "base_book_version":event.get("source_book_version")}}
         body = {**event, "market": market, "market_seq": previous+1,
                 "prev_market_seq": previous, "book_epoch": self.epochs.get(market, 0),
                 "route": deepcopy(route), "policy_version": POLICY,
@@ -39,10 +43,16 @@ class Owner:
                 "asset_id_kind": self.scope[market]["asset_id_kind"],
                 "decision_created_ns": time.time_ns(), "decision_mono_ns": time.monotonic_ns(),
                 "provenance":self.provenance,
+                "clock_id":self.provenance.get("clock_id"),
                 "durability": "LOCAL_DURABLE", "stream_semantics": "SOURCE_SELECTED_L2",
                 "quality": event.get("quality", {"upstream_completeness": "UNKNOWN"})}
-        rec = self.journal.append(self.record_kind, body)
-        self.working[market] = apply(self.working.get(market, {}), body)
+        prepared = getattr(event, "prepared", None)
+        if prepared is None:
+            prepared = prepare_record(body)
+        rec = self.journal.append(self.record_kind, body, prepared=prepared)
+        rec.trace["working_apply_start"] = time.monotonic_ns()
+        self.working[market] = apply(self.working.get(market, {}), body, prepared)
+        rec.trace["working_apply_end"] = time.monotonic_ns()
         self.seq[market] = previous+1
         self.emits += 1
         return rec
@@ -53,9 +63,12 @@ class Owner:
         body, market = rec.body, rec.body["market"]
         if body["prev_market_seq"] != self.committed_seq.get(market, 0):
             raise ValueError("COMMITTED_MARKET_SEQUENCE_GAP")
-        self.committed[market] = apply(self.committed.get(market, {}), body)
+        rec.trace["committed_apply_start"] = time.monotonic_ns()
+        self.committed[market] = apply(self.committed.get(market, {}), body, rec.prepared)
         self.committed_seq[market] = body["market_seq"]
+        self._committed_meta[market] = body
         self.latencies_ms.append((time.monotonic_ns()-body["decision_mono_ns"])/1e6)
+        rec.trace["committed_apply_end"] = time.monotonic_ns()
         for subscription in tuple(self.subscribers):
             if market in subscription["markets"]:
                 try:
@@ -63,6 +76,7 @@ class Owner:
                 except BufferError:
                     self.overflows += 1
                     self.subscribers.discard(subscription)
+        rec.trace["publish_enqueue"] = time.monotonic_ns()
 
     def bootstrap(self, markets=None, max_bytes=64*1024*1024):
         markets = set(self.scope) if markets is None else set(markets)
@@ -73,7 +87,7 @@ class Owner:
         for market in sorted(markets):
             state = self.committed.get(market, {})
             if state:
-                items.append({"market": market, "assets": deepcopy(state),
+                items.append({"market": market, "assets": state_view(state),
                               "cut": self.committed_seq[market],
                               "book_epoch": self._committed_epoch(market),
                               "route": self._committed_route(market),
@@ -115,6 +129,8 @@ class Plant(Owner):
         self.states = {}
         self.history = deque(maxlen=65536)
         self.start_mono_ns = time.monotonic_ns()
+        self.ingress_queues = {}
+        self.loop_lag_ms = 0.
         self.dispositions = {}
         self.baseline_pending = deque()
         self.require_transport_proof = False
@@ -160,7 +176,9 @@ class Plant(Owner):
             "transport_policy":"fresh_pong_rtt_v1" if self.require_transport_proof else "OBSERVATION_ONLY",
             "transport_healthy":self.healthy_transport(route.get("shard"),route.get("lane")),
             "pong_rtt_ms":proof.get("rtt_ms"),"pong_raw_ref":proof.get("raw_ref")}
-        return super().emit(market,{**event,"quality":quality},route,reset=reset)
+        normalized = ChangeGroup({**event,"quality":quality})
+        normalized.prepared = getattr(event,"prepared",None)
+        return super().emit(market,normalized,route,reset=reset)
 
     def transition(self, key, **values):
         state = self.states[key]
@@ -211,8 +229,7 @@ class Plant(Owner):
 
     def usable(self, key):
         book = self.books[key]
-        return self.healthy_transport(key[1],key[2]) and book.ready and all(not a["bids"] or not a["asks"] or max(a["bids"]) < min(a["asks"])
-                                  for a in book.assets.values())
+        return self.healthy_transport(key[1],key[2]) and book.ready and book.uncrossed
 
     def select(self, market, exclude=None, reason="FIRST_READY"):
         candidates = [k for k in sorted(self.market_keys.get(market,())) if k != exclude and self.usable(k)]
@@ -221,6 +238,10 @@ class Plant(Owner):
             self.selected[market] = key
             return self.emit(market, {"kind": "SOURCE_RESET", "scope": "MARKET",
                 "assets": self.books[key].snapshot(), "reason": reason,
+                "input_timing":getattr(self.books[key],"input_timing",{}),
+                "source_book_version":self.books[key].version,
+                "input_cut":{"log_id":self.journal.producer+":"+self.journal.kind,
+                    "log_generation":self.journal.stream,"record_sequence":self.journal.offset},
                 "quality": {"continuity_unknown": True, "upstream_completeness": "UNKNOWN"}},
                 self.route(key), reset=True)
         self.selected.pop(market, None)
@@ -240,7 +261,7 @@ class Plant(Owner):
                 if self.selected.get(key[0]) == key:
                     self.select(key[0], exclude=key, reason=reason)
 
-    def ingest(self, shard, lane, connection, recv_seq, raw, recv_utc_ns=None, recv_mono_ns=None):
+    def ingest(self, shard, lane, connection, recv_seq, raw, recv_utc_ns=None, recv_mono_ns=None, ingress=None):
         # Identity assigned before parsing, routing or readiness filters.
         meta = {"shard": shard, "lane": lane, "connection": connection, "recv_seq": recv_seq,
                 "connection_epoch": self.connection_epochs.get((shard,lane)) if self.connections.get((shard,lane))==connection else "STALE_UNKNOWN",
@@ -248,6 +269,8 @@ class Plant(Owner):
                 "recv_mono_ns": recv_mono_ns or time.monotonic_ns(),
                 "clock_quality": "LOCAL_WALL_UNVERIFIED", "subscription_revision": 1}
         raw_rec = self.journal.append("RAW", meta, raw)
+        timing = {"recv_return":meta["recv_mono_ns"],**(ingress or {}),"clock_id":self.provenance.get("clock_id")}
+        raw_rec.trace.update({k:v for k,v in timing.items() if k!="clock_id"})
         self.raw_received += 1
         self.raw_bytes += len(raw)
         base_ref = {"plant": self.journal.producer, "capture_run": self.journal.stream,
@@ -258,7 +281,9 @@ class Plant(Owner):
                 events = []
                 results.append({"status": "HEARTBEAT"})
             else:
+                timing["parse_start"] = time.monotonic_ns()
                 events = json.loads(raw, parse_float=str)
+                timing["parse_end"] = time.monotonic_ns()
                 events = events if isinstance(events, list) else [events]
             for index, event in enumerate(events):
                 ref = {**base_ref, "top_level_message_index": index}
@@ -273,7 +298,11 @@ class Plant(Owner):
                     results.append({"status": "UNKNOWN_MARKET_OR_CONTROL", "raw_ref": ref})
                     continue
                 try:
+                    timing["source_apply_start"] = time.monotonic_ns()
                     normalized = self.books[key].observe(event, ref)
+                    timing["source_apply_end"] = time.monotonic_ns()
+                    normalized["input_timing"] = dict(timing)
+                    self.books[key].input_timing = dict(timing)
                 except (ValueError, KeyError, TypeError) as exc:
                     self.books[key].invalidate()
                     for token in self.books[key].assets:
@@ -330,7 +359,7 @@ class Plant(Owner):
                     continue
                 current = self.connections.get(key[:2]) == state["connection"]
                 book = self.books[(state["market"], key[0], key[1])].assets[state["token"]]
-                usable = current and self.healthy_transport(key[0],key[1]) and book["ready"] and (not book["bids"] or not book["asks"] or max(book["bids"]) < min(book["asks"]))
+                usable = current and self.healthy_transport(key[0],key[1]) and book["ready"] and uncrossed(book)
                 self.transition(key, baseline_durable=True, ready=usable,
                                 status="READY" if usable else "WAIT_HEALTHY_PONG" if self.require_transport_proof else "RECOVERING")
 
@@ -373,7 +402,7 @@ class Gateway(Owner):
             return
         plant, shadow = candidates[0]
         self.selected[market] = plant
-        self.emit(market, {"kind": "SOURCE_RESET", "scope": "MARKET", "assets": shadow["assets"],
+        self.emit(market, {"kind": "SOURCE_RESET", "scope": "MARKET", "assets": state_view(shadow["assets"]),
             "reason": reason, "plant_session_id": shadow["session"],
             "bootstrap_snapshot_id": shadow.get("snapshot_id"), "plant_cut": shadow["seq"],
             "quality": {**shadow.get("quality",{}),"continuity_unknown": True, "upstream_completeness": "UNKNOWN"}}, shadow["route"], reset=True)
@@ -387,7 +416,7 @@ class Gateway(Owner):
             if market not in self.scope or set(item["assets"]) != set(self.scope[market]["assets"]):
                 raise ValueError("INCOMPLETE_MARKET_SNAPSHOT")
             ready = all(x["ready"] for x in item["assets"].values())
-            self.shadows[(plant,market)] = {"ready": ready, "assets": deepcopy(item["assets"]),
+            self.shadows[(plant,market)] = {"ready": ready, "assets": apply({}, {"kind":"SOURCE_RESET","scope":"MARKET","assets":item["assets"]}),
                 "seq": item["cut"], "session": session, "snapshot_id": snapshot["snapshot_id"],
                 "quality": deepcopy(item.get("quality",{})),
                 "route": {**item["route"], "plant_session_id": session}}
@@ -437,7 +466,8 @@ class Gateway(Owner):
         while len(self.seen) > self.retry_window or self.seen_bytes > self.retry_bytes:
             _,old_frame = self.seen.popitem(last=False)
             self.seen_bytes -= len(old_frame)
-        shadow["assets"] = apply(shadow["assets"], body)
+        prepared = prepare_record(body)
+        shadow["assets"] = apply(shadow["assets"], body, prepared)
         shadow.update(seq=body["market_seq"], route={**body["route"], "plant_session_id": session},
                       quality=deepcopy(body.get("quality",{})),
                       ready=bool(shadow["assets"]) and all(a["ready"] for a in shadow["assets"].values()))
@@ -447,9 +477,10 @@ class Gateway(Owner):
                 shadow["ready"] = False
                 self.choose(market, body.get("reason", "PLANT_GAP"))
             else:
-                event = {**body, "source_plant_record": {"stream": rec.stream, "offset": rec.offset},
+                event = ChangeGroup({**body, "source_plant_record": {"stream": rec.stream, "offset": rec.offset},
                          "plant_market_seq": body["market_seq"], "plant_session_id": session,
-                         "gateway_receive_ns": time.time_ns()}
+                         "gateway_receive_ns": time.time_ns()})
+                event.prepared = prepared
                 self.emit(market, event, shadow["route"], reset=body["kind"] == "SOURCE_RESET")
         elif market not in self.selected and shadow["ready"]:
             self.choose(market)
