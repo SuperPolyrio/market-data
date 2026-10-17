@@ -18,7 +18,7 @@ from collections import deque
 
 import websockets
 
-from .book import digest, inspect
+from .book import digest, inspect, state_view
 from .catalog import shards, validate_scope
 from .core import Gateway, Plant
 from .journal import Journal, atomic_json, read_journal, recover_open
@@ -71,7 +71,16 @@ def tls_context(config, server=False):
 
 
 async def transmit_snapshot(writer, reader, snapshot, session, queue=None):
-    data = json_bytes(snapshot)
+    def encode_snapshot():
+        value={**snapshot,"items":[{**item,"assets":state_view(item["assets"])} for item in snapshot["items"]]}
+        data=bytearray()
+        # Iterative encoding yields the GIL rather than holding it for an entire
+        # multi-market json.dumps call in a supposedly isolated background thread.
+        for piece in json.JSONEncoder(ensure_ascii=False,separators=(",",":"),sort_keys=True,allow_nan=False).iterencode(value):
+            data.extend(piece.encode())
+            if len(data)>64*1024*1024:raise BufferError("SNAPSHOT_BUDGET_EXCEEDED")
+        return bytes(data)
+    data = await asyncio.get_running_loop().run_in_executor(None,encode_snapshot)
     if len(data) > 64*1024*1024:
         raise BufferError("SNAPSHOT_BUDGET_EXCEEDED")
     chunk_bytes = 256*1024
@@ -128,6 +137,7 @@ async def receive_snapshot(reader):
 
 async def serve(owner, config, stop):
     active_tasks = set()
+    snapshot_slots=asyncio.Semaphore(1)
     async def client(reader, writer):
         task = asyncio.current_task()
         active_tasks.add(task)
@@ -142,8 +152,9 @@ async def serve(owner, config, stop):
                     "reason": "GENERATION_CHANGED", "old_tape_replay": "EXPLICIT_REPLAY_ONLY"}))
                 return
             session = str(uuid.uuid4())
-            snapshot, subscription = owner.bootstrap(hello.body.get("markets"), config["queue_bytes"])
-            await asyncio.wait_for(transmit_snapshot(writer, reader, snapshot, session,subscription["queue"]), 30)
+            async with snapshot_slots:
+                snapshot, subscription = owner.bootstrap(hello.body.get("markets"), config["queue_bytes"],deferred=True)
+                await asyncio.wait_for(transmit_snapshot(writer, reader, snapshot, session,subscription["queue"]), 30)
             while not stop.is_set():
                 if subscription["queue"].failed:
                     raise BufferError("RESYNC_REQUIRED")
@@ -196,119 +207,30 @@ async def serve(owner, config, stop):
 
 
 async def lane_loop(plant, shard, lane, markets, config, stop):
-    epoch = 0
-    tokens = [t for market in markets for t in market["assets"]]
+    from .reader import session_manager
+    await session_manager(plant,shard,lane,markets,config,stop)
+
+
+async def qualification_loop(plant,stop):
+    last_full=time.monotonic()
     while not stop.is_set():
-        await connection_credit(config)
-        epoch += 1
-        connection = str(uuid.uuid4())
-        recv_seq = 0
-        heartbeat = None
-        plant.connect(shard,lane,connection,epoch,markets)
-        try:
-            proxy = config.get("outbound_proxy", "env")
-            if config.get("lane_proxies"):
-                proxy = config["lane_proxies"][lane % len(config["lane_proxies"])]
-            if proxy == "env":
-                proxy = os.getenv("HTTPS_PROXY") or os.getenv("https_proxy") or True
-            elif proxy == "direct":
-                proxy = None
-            async with websockets.connect(config.get("ws_url",WS_URL), proxy=proxy,
-                    max_size=config["ws_max_bytes"], max_queue=min(16,config["queue_bytes"]//config["ws_max_bytes"]), ping_interval=None,
-                    compression="deflate", open_timeout=config.get("open_timeout_seconds",20), close_timeout=5) as ws:
-                attempt = str(uuid.uuid4())
-                command = {"type": "market", "assets_ids": tokens, "initial_dump": True,
-                           "level": 2, "custom_feature_enabled": True}
-                plant.journal.append("SUBSCRIPTION_WRITE_START", {"connection": connection,
-                    "assets": tokens, "send_attempt_id": attempt})
-                await ws.send(json_bytes(command).decode())
-                plant.written(shard,lane,connection,tokens,attempt)
-                last_pong = time.monotonic()
-                last_receive = last_pong
-                initial_pong = False
-                pending_pings = deque()
-                subscribe_mono = time.monotonic()
-                async def ping():
-                    nonlocal last_pong, subscribe_mono
-                    while not stop.is_set():
-                        await asyncio.sleep(config["heartbeat_seconds"])
-                        timeout = config["pong_timeout_seconds"] if initial_pong else config.get("initial_pong_timeout_seconds",config["pong_timeout_seconds"])
-                        # Initial dumps may precede PONG in the upstream send
-                        # queue. Received native frames are also transport liveness;
-                        # do not discard a progressing multi-chunk baseline.
-                        if time.monotonic()-max(last_pong,last_receive) > timeout:
-                            await ws.close(code=1011, reason="PONG_TIMEOUT")
-                            return
-                        proof=plant.transports.get((shard,lane),{})
-                        if proof.get("healthy") and (not plant.healthy_transport(shard,lane) or
-                                pending_pings and (time.monotonic_ns()-pending_pings[0])/1e6 > config.get("maximum_healthy_rtt_ms",2000)):
-                            plant.transport_quality(shard,lane,connection,False,reason="PONG_FRESHNESS_DEADLINE")
-                        if (pending_pings and time.monotonic()-subscribe_mono > config.get("backlog_reconnect_grace_seconds",60)
-                                and (time.monotonic_ns()-pending_pings[0])/1e9 > config.get("maximum_receive_backlog_seconds",30)):
-                            plant.journal.append("BACKLOG_RESYNC",{"connection":connection,
-                                "oldest_ping_age_ms":(time.monotonic_ns()-pending_pings[0])/1e6,
-                                "continuity":"UNKNOWN_RECONNECT_REQUIRES_NATIVE_BASELINE"})
-                            await ws.close(code=1011,reason="RECEIVE_BACKLOG_RESET")
-                            return
-                        missing = [t for t in tokens if not plant.states[(shard,lane,t)]["book_seen"]]
-                        if missing and time.monotonic()-subscribe_mono > config["first_snapshot_timeout_seconds"]:
-                            plant.journal.append("SNAPSHOT_TIMEOUT", {"connection": connection,"missing_tokens":missing})
-                            # Repair only missing initial baselines on the same lane.
-                            # A permanently unavailable token must not reset healthy
-                            # books for the other hundreds of tokens in this socket.
-                            await ws.send(json_bytes({"operation":"unsubscribe","assets_ids":missing}).decode())
-                            retry = str(uuid.uuid4())
-                            plant.journal.append("SUBSCRIPTION_WRITE_START",{"connection":connection,
-                                "assets":missing,"send_attempt_id":retry,"reason":"MISSING_BASELINE_REPAIR"})
-                            await ws.send(json_bytes({"operation":"subscribe","assets_ids":missing,
-                                "initial_dump":True,"level":2,"custom_feature_enabled":True}).decode())
-                            plant.written(shard,lane,connection,missing,retry)
-                            subscribe_mono = time.monotonic()
-                        # Keep the mandatory heartbeat cadence during an initial
-                        # dump. Identical PONGs are matched FIFO, never to the most
-                        # recent PING (which could disguise receive backlog).
-                        if len(pending_pings)>=32:
-                            await ws.close(code=1011,reason="PONG_QUEUE_BUDGET")
-                            return
-                        sent_ns=time.monotonic_ns()
-                        pending_pings.append(sent_ns)
-                        plant.journal.append("PING_SEND",{"connection":connection,"send_mono_ns":sent_ns})
-                        await ws.send("PING")
-                heartbeat = asyncio.create_task(ping())
-                async for message in ws:
-                    utc, mono = time.time_ns(), time.monotonic_ns()
-                    last_receive = time.monotonic()
-                    recv_seq += 1
-                    raw = message.encode() if isinstance(message,str) else message
-                    if raw == b"PONG":
-                        last_pong = time.monotonic()
-                        initial_pong = True
-                    raw_record=plant.ingest(shard,lane,connection,recv_seq,raw,utc,mono)
-                    if raw==b"PONG" and pending_pings:
-                        rtt_ms=(mono-pending_pings.popleft())/1e6
-                        plant.transport_quality(shard,lane,connection,
-                            rtt_ms<=config.get("maximum_healthy_rtt_ms",2000),rtt_ms=rtt_ms,
-                            raw_ref={"plant":plant.journal.producer,"capture_run":raw_record.stream,
-                                "capture_offset":raw_record.offset,"connection":connection,"recv_seq":recv_seq})
-                    # recv() may complete synchronously for an already buffered burst.
-                    # Yield at the complete application-message boundary so group sync,
-                    # publishing and PING cannot be starved by a continuously hot socket.
+        expected=time.monotonic()+.02
+        await asyncio.sleep(.02)
+        plant.loop_lag_ms=max(0.,(time.monotonic()-expected)*1000)
+        plant.journal.metrics.observe("event_loop_lag",plant.loop_lag_ms)
+        if time.monotonic()-last_full>=1:
+            plant.dirty_transports.update(plant.transport_keys)
+            last_full=time.monotonic()
+        dirty=tuple(plant.dirty_transports)
+        plant.dirty_transports.clear()
+        started=time.monotonic_ns()
+        for slot in dirty:
+            for key in tuple(plant.transport_keys.get(slot,())):
+                if key not in plant.books:continue
+                plant.reconcile(key)
+                if time.monotonic_ns()-started>2_000_000:
                     await asyncio.sleep(0)
-                    if stop.is_set():
-                        break
-        except asyncio.CancelledError:
-            raise
-        except (OSError, websockets.WebSocketException, TimeoutError, asyncio.TimeoutError) as exc:
-            plant.journal.append("WS_ERROR", {"connection": connection, "error": str(exc)})
-        finally:
-            if heartbeat:
-                heartbeat.cancel()
-                await asyncio.gather(heartbeat, return_exceptions=True)
-            plant.disconnect(shard,lane,connection,"WS_DISCONNECT")
-        try:
-            await asyncio.wait_for(stop.wait(), random.uniform(.2, min(20,2**min(epoch,4))))
-        except asyncio.TimeoutError:
-            pass
+                    started=time.monotonic_ns()
 
 
 async def plant_session(gateway, plant, config, stop):
@@ -323,7 +245,7 @@ async def plant_session(gateway, plant, config, stop):
             snapshot, session = await receive_snapshot(reader)
             await confirm_snapshot(reader,writer,snapshot,session)
             gateway.start_session(plant, session)
-            gateway.snapshot(plant,session,snapshot)
+            await gateway.snapshot_async(plant,session,snapshot)
             batch_records=0
             while not stop.is_set():
                 rec = decode(await asyncio.wait_for(read_frame(reader), 30))
@@ -429,6 +351,7 @@ async def metrics_loop(owner, root, stop):
     executor=ThreadPoolExecutor(max_workers=1,thread_name_prefix="metrics")
     loop=asyncio.get_running_loop()
     last_trace=0
+    import orjson
     while not stop.is_set():
         config = owner.runtime_config
         spool = 0
@@ -444,8 +367,9 @@ async def metrics_loop(owner, root, stop):
         snapshot["local_spool_bytes"] = spool
         summary=summarize_status(snapshot)
         def write_metrics():
-            atomic_json(root/"status.json",snapshot)
-            atomic_json(root/"summary.json",summary)
+            encoder=lambda value:orjson.dumps(value,option=orjson.OPT_SORT_KEYS)
+            atomic_json(root/"status.json",snapshot,encoder=encoder)
+            atomic_json(root/"summary.json",summary,encoder=encoder)
         future=loop.run_in_executor(executor,write_metrics)
         try:
             await asyncio.shield(future)
@@ -524,25 +448,27 @@ async def archive_loop(root, config, stop, owner=None):
                 atomic_json(root/"archive-error.json",{"error":str(exc),"path":str(path),"at_ns":time.time_ns(),
                     "action":"LOCAL_JOURNAL_RETAINED_RETRY_PENDING"})
                 break
-        receipts = [json.loads(p.read_bytes()) for p in (root/"journal").glob("*.archive.json")]
-        streams = {}
-        for row in receipts:
-            streams.setdefault(row["manifest"]["stream"],[]).append(row["manifest"])
-        unarchived = [p for p in (root/"journal").glob("*.journal") if not p.with_suffix(".archive.json").exists()]
-        ranges = {}
-        for stream,rows in streams.items():
-            last = max(r["last"] for r in rows)
-            local_last = max(last,owner.journal.durable_offset) if owner and stream == owner.journal.stream else last
-            ranges[stream] = progress(rows,local_last)
-            ranges[stream]["holes_before_last_commit"] = [hole for hole in ranges[stream]["holes"] if hole[0] <= last]
-        atomic_json(root/"archive-progress.json",{
-            "utc_ns":time.time_ns(),"backend":store.backend,"committed_segments":len(receipts),
-            "journal_bytes_committed":sum(r.get("local_journal_bytes",0) for r in receipts),
-            "object_bytes_committed":sum(r["manifest"]["object_bytes"] for r in receipts),
-            "evicted_bytes":sum(r.get("eviction",{}).get("released_bytes",0) for r in receipts),
-            "sealed_pending_bytes":sum(p.stat().st_size for p in unarchived),
-            "sealed_oldest_age_seconds":max((time.time()-p.stat().st_mtime for p in unarchived),default=0),
-            "streams":ranges})
+        def write_archive_progress():
+            receipts = [json.loads(p.read_bytes()) for p in (root/"journal").glob("*.archive.json")]
+            streams = {}
+            for row in receipts:
+                streams.setdefault(row["manifest"]["stream"],[]).append(row["manifest"])
+            unarchived = [p for p in (root/"journal").glob("*.journal") if not p.with_suffix(".archive.json").exists()]
+            ranges = {}
+            for stream,rows in streams.items():
+                last = max(r["last"] for r in rows)
+                local_last = max(last,owner.journal.durable_offset) if owner and stream == owner.journal.stream else last
+                ranges[stream] = progress(rows,local_last)
+                ranges[stream]["holes_before_last_commit"] = [hole for hole in ranges[stream]["holes"] if hole[0] <= last]
+            atomic_json(root/"archive-progress.json",{
+                "utc_ns":time.time_ns(),"backend":store.backend,"committed_segments":len(receipts),
+                "journal_bytes_committed":sum(r.get("local_journal_bytes",0) for r in receipts),
+                "object_bytes_committed":sum(r["manifest"]["object_bytes"] for r in receipts),
+                "evicted_bytes":sum(r.get("eviction",{}).get("released_bytes",0) for r in receipts),
+                "sealed_pending_bytes":sum(p.stat().st_size for p in unarchived),
+                "sealed_oldest_age_seconds":max((time.time()-p.stat().st_mtime for p in unarchived),default=0),
+                "streams":ranges})
+        await asyncio.get_running_loop().run_in_executor(executor,write_archive_progress)
         try:
             await asyncio.wait_for(stop.wait(),config.get("poll_seconds",2))
         except asyncio.TimeoutError:
@@ -566,6 +492,9 @@ async def run_node(role, node_id, config, scope, root, seconds=None):
         owner.require_transport_proof=config.get("require_transport_proof",True)
         owner.prefer_primary_lane=config.get("prefer_primary_lane",True)
         owner.maximum_transport_age_ns=int(config.get("transport_proof_max_age_seconds",30)*10**9)
+        owner.defer_qualification=True
+        owner.require_source_admission=True
+        owner.require_local_progress=True
     else:
         owner = Gateway(journal,scope)
         previous = recovered
@@ -602,6 +531,7 @@ async def run_node(role, node_id, config, scope, root, seconds=None):
     if config.get("archive",{}).get("store_uri") or config.get("archive",{}).get("ssh_store"):
         tasks.append(asyncio.create_task(archive_loop(root,config["archive"],stop,owner)))
     if role == "plant":
+        tasks.append(asyncio.create_task(qualification_loop(owner,stop)))
         for shard, markets in enumerate(shards(scope,config["assets_per_connection"])):
             for lane in range(config["lanes"]):
                 tasks.append(asyncio.create_task(lane_loop(owner,shard,lane,markets,config,stop)))

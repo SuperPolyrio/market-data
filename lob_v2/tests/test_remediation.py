@@ -7,7 +7,7 @@ import time
 
 import pytest
 
-from lobv2.book import apply, apply_state, prepare_record, state_view
+from lobv2.book import apply, apply_state, prepare_record, state_view, freeze_state
 from lobv2.core import Owner
 from lobv2.journal import Journal, read_journal
 
@@ -134,4 +134,119 @@ def test_short_write_and_failure_preserve_prefix(tmp_path,monkeypatch):
         with pytest.raises(OSError):await j.sync()
         assert j.durable_offset==j.applied_offset==5 and j.failure
         os.close(j.fd);j._io.shutdown()
+    asyncio.run(run())
+
+
+def test_frozen_cut_survives_in_place_groups_gap_and_resets():
+    state=apply_state({},reset())
+    frozen=freeze_state(state)
+    expected=state_view(frozen)
+    assert state['1']['bids'] is frozen['1']['bids']
+    state=apply_state(state,group(9))
+    assert state['1']['bids'] is not frozen['1']['bids']
+    apply_state(state,{'kind':'GAP'})
+    apply_state(state,reset('B'))
+    assert state_view(frozen)==expected and all(a['ready'] for a in frozen.values())
+
+
+def test_text_probe_ambiguity_cannot_be_reused_by_late_pong():
+    from lobv2.recovery import TextProbe
+    probe=TextProbe(2,3)
+    assert probe.begin(10_000_000)
+    probe.written(10_100_000)
+    assert probe.expire(13_000_000)
+    assert not probe.begin(14_000_000) and probe.observe(14_100_000) is None
+    assert probe.ambiguous and probe.consecutive==0
+    fresh=TextProbe(2,3)
+    for i in range(3):
+        now=20_000_000+i*10_000_000
+        assert fresh.begin(now)
+        fresh.written(now+100_000)
+        result=fresh.observe(now+200_000)
+        assert result['healthy']==(i==2)
+    assert fresh.observe(60_000_000) is None
+
+
+def test_recovery_budget_is_shared_and_release_is_immediate(tmp_path):
+    from lobv2.recovery import RecoveryBudget
+    config={'recovery_lock_root':str(tmp_path),'recovery_sessions_per_host':2,'recovery_sessions_per_plant':1,'recovery_sessions_per_provider':1}
+    first=RecoveryBudget(config,'P-0001','LA')
+    assert first.try_acquire()
+    same_provider=RecoveryBudget(config,'Q-9999','LA')
+    assert not same_provider.try_acquire()
+    same_plant=RecoveryBudget(config,'P-9999','profile12')
+    assert not same_plant.try_acquire()
+    first.release()
+    assert same_provider.try_acquire()
+    same_provider.release()
+
+
+def test_pong_liveness_cannot_hide_local_queue_and_quiet_token_is_valid(tmp_path):
+    from test_semantics import make_plant,initialize
+    from lobv2.wire import ByteQueue,MAX_RECORD
+    async def run():
+        p=make_plant(tmp_path);initialize(p);await p.journal.sync()
+        p.require_transport_proof=True;p.require_local_progress=True;p.runtime_config={}
+        p.transport_quality(0,0,'c0',True,rtt_ms=1)
+        assert p.usable(('m',0,0))
+        queue=ByteQueue(MAX_RECORD);queue.put(b'data');queue.arrivals[0]-=2_000_000_000
+        p.ingress_queues[(0,0)]=queue
+        assert p.healthy_transport(0,0) and not p.usable(('m',0,0))
+        assert 'LOCAL_QUEUE_BACKLOG' in p.eligibility_reasons(('m',0,0),'1')
+        await queue.get()
+        assert p.usable(('m',0,0))
+        await p.journal.close()
+    asyncio.run(run())
+
+
+def test_partial_candidate_never_retires_socket_still_serving_other_market(tmp_path,monkeypatch):
+    import json
+    import lobv2.node as node
+    from lobv2.core import Plant
+    sockets=[]
+    scope={'markets':[{'market':m,'assets':[str(i),str(i+1)],'version':'1','asset_id_kind':'CLOB_TOKEN_ID'} for m,i in [('m1',11),('m2',21)]]}
+    class Socket:
+        def __init__(self):
+            self.index=len(sockets);sockets.append(self);self.closed=False;self.pongs=0;self.tokens=[];self.book_sent=False
+        async def __aenter__(self):return self
+        async def __aexit__(self,*args):pass
+        async def send(self,data):
+            if data=='PING':self.pongs+=1
+            else:
+                body=json.loads(data)
+                if body.get('type')=='market':self.tokens=body['assets_ids']
+        async def close(self,**kwargs):self.closed=True
+        def __aiter__(self):return self
+        async def __anext__(self):
+            await asyncio.sleep(.003)
+            if self.closed:raise StopAsyncIteration
+            if not self.book_sent:
+                self.book_sent=True
+                return json.dumps([{'event_type':'book','market':m['market'],'asset_id':t,'bids':[],'asks':[]}
+                    for m in scope['markets'] for t in m['assets'] if t in self.tokens and not(self.index==0 and t=='22')])
+            if self.pongs:self.pongs-=1;return 'PONG'
+            return '{}'
+    monkeypatch.setattr(node.websockets,'connect',lambda *a,**kw:Socket())
+    async def run():
+        j=Journal(tmp_path/'j','P','capture');p=Plant(j,scope);stop=asyncio.Event()
+        config={'outbound_proxy':'direct','ws_max_bytes':1024,'queue_bytes':16*1024*1024,'heartbeat_seconds':.01,
+            'first_snapshot_timeout_seconds':.15,'maximum_healthy_rtt_ms':100,'backlog_reconnect_grace_seconds':.04,
+            'recovery_poll_seconds':.005,'recovery_lock_root':str(tmp_path/'budget')}
+        p.runtime_config=config;p.require_transport_proof=True;p.require_source_admission=True;p.defer_qualification=True
+        tasks=[asyncio.create_task(j.run(stop,.002)),asyncio.create_task(node.qualification_loop(p,stop)),
+               asyncio.create_task(node.lane_loop(p,0,0,scope['markets'],config,stop))]
+        try:
+            for _ in range(100):
+                if len(p.selected)==2:break
+                await asyncio.sleep(.02)
+            assert p.selected['m1'][1]==0 and p.selected['m2'][1]>=1_000_000
+            await asyncio.sleep(.05)
+            assert not sockets[0].closed
+            assert p.usable(p.selected['m1']) and p.usable(p.selected['m2'])
+        finally:
+            stop.set()
+            for task in tasks:task.cancel()
+            results=await asyncio.gather(*tasks,return_exceptions=True)
+            await j.close()
+        assert not [r for r in results if isinstance(r,Exception)]
     asyncio.run(run())

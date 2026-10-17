@@ -4,8 +4,9 @@ from copy import deepcopy
 import json
 import time
 import uuid
+import asyncio
 
-from .book import SourceBook, apply_state as apply, inspect, state_view, prepare_record, ChangeGroup, uncrossed
+from .book import SourceBook, apply_state as apply, inspect, state_view, prepare_record, ChangeGroup, uncrossed, freeze_state
 from .wire import ByteQueue
 
 POLICY = "single_healthy_route_v2.0.1"
@@ -78,7 +79,7 @@ class Owner:
                     self.subscribers.discard(subscription)
         rec.trace["publish_enqueue"] = time.monotonic_ns()
 
-    def bootstrap(self, markets=None, max_bytes=64*1024*1024):
+    def bootstrap(self, markets=None, max_bytes=64*1024*1024, *, deferred=False):
         markets = set(self.scope) if markets is None else set(markets)
         if not markets <= self.scope.keys():
             raise ValueError("UNKNOWN_MARKET_SUBSCRIPTION")
@@ -87,7 +88,7 @@ class Owner:
         for market in sorted(markets):
             state = self.committed.get(market, {})
             if state:
-                items.append({"market": market, "assets": state_view(state),
+                items.append({"market": market, "assets": freeze_state(state) if deferred else state_view(state),
                               "cut": self.committed_seq[market],
                               "book_epoch": self._committed_epoch(market),
                               "route": self._committed_route(market),
@@ -131,6 +132,14 @@ class Plant(Owner):
         self.start_mono_ns = time.monotonic_ns()
         self.ingress_queues = {}
         self.loop_lag_ms = 0.
+        self.defer_qualification = False
+        self.dirty_transports = set()
+        self.transport_keys = {}
+        self.active_routes = {}
+        self.admitted_keys = set()
+        self.require_source_admission = False
+        self.require_local_progress = False
+        self.admission_pending = set()
         self.dispositions = {}
         self.baseline_pending = deque()
         self.require_transport_proof = False
@@ -145,30 +154,41 @@ class Plant(Owner):
         return bool(proof.get("healthy") and proof.get("connection")==self.connections.get((shard,lane))
             and time.monotonic_ns()-proof["proof_mono_ns"] <= self.maximum_transport_age_ns)
 
-    def transport_quality(self, shard, lane, connection, healthy, *, rtt_ms=None, raw_ref=None, reason="PONG"):
+    def transport_quality(self, shard, lane, connection, healthy, *, rtt_ms=None, raw_ref=None, reason="PONG", proof_mono_ns=None):
         if self.connections.get((shard,lane)) != connection:
             return
         proof={"connection":connection,"healthy":healthy,"rtt_ms":rtt_ms,
-            "proof_mono_ns":time.monotonic_ns(),"raw_ref":raw_ref,"reason":reason,
+            "proof_mono_ns":proof_mono_ns or time.monotonic_ns(),"raw_ref":raw_ref,"reason":reason,
             "policy_version":"fresh_pong_rtt_v1"}
         self.transports[(shard,lane)] = proof
         self.journal.append("TRANSPORT_QUALITY",{"shard":shard,"lane":lane,**proof})
         if not self.require_transport_proof:
             return
-        for key,book in self.books.items():
-            if key[1:] != (shard,lane):
-                continue
-            usable=self.usable(key)
-            for token,asset in book.assets.items():
-                state=self.states[(shard,lane,token)]
-                ready=usable and state["baseline_durable"]
-                self.transition((shard,lane,token),ready=ready,transport_healthy=healthy,
-                    pong_rtt_ms=rtt_ms,status="READY" if ready else "WAIT_HEALTHY_PONG")
-            selected=self.selected.get(key[0])
-            if selected==key and not usable:
-                self.select(key[0],exclude=key,reason="TRANSPORT_UNQUALIFIED")
-            elif usable and (selected is None or self.prefer_primary_lane and lane==0 and selected[2]!=0):
-                self.select(key[0],reason="HEALTHY_PRIMARY_READY" if lane==0 else "HEALTHY_SOURCE_READY")
+        if self.defer_qualification:
+            self.dirty_transports.add((shard,lane))
+            return
+        for key in tuple(self.transport_keys.get((shard,lane),())):
+            self.reconcile(key)
+
+    def reconcile(self,key):
+        market,shard,lane=key
+        book=self.books[key]
+        if self.require_source_admission and key not in self.admitted_keys:
+            self.consider_admission(key)
+        usable=self.usable(key)
+        for token,asset in book.assets.items():
+            state=self.states[(shard,lane,token)]
+            ready=usable and state["baseline_durable"]
+            proof=self.transports.get((shard,lane),{})
+            reasons=self.eligibility_reasons(key,token)
+            self.transition((shard,lane,token),ready=ready,transport_healthy=bool(proof.get("healthy")),
+                pong_rtt_ms=proof.get("rtt_ms"),eligibility_reasons=reasons,
+                status="READY" if ready else reasons[0] if reasons else "WAIT_MARKET_ADMISSION")
+        selected=self.selected.get(key[0])
+        if selected==key and not usable:
+            self.select(key[0],exclude=key,reason="TRANSPORT_UNQUALIFIED")
+        elif usable and (selected is None or self.prefer_primary_lane and lane==0 and selected[2]!=0):
+            self.select(key[0],reason="HEALTHY_PRIMARY_READY" if lane==0 else "HEALTHY_SOURCE_READY")
 
     def emit(self, market, event, route, *, reset=False):
         proof=self.transports.get((route.get("shard"),route.get("lane")),{})
@@ -199,6 +219,8 @@ class Plant(Owner):
             key = (market["market"], shard, lane)
             self.books[key] = SourceBook(market["market"], market["assets"])
             self.market_keys.setdefault(market["market"],set()).add(key)
+            self.transport_keys.setdefault((shard,lane),set()).add(key)
+            self.active_routes.setdefault((market["market"],lane),key)
             for token in market["assets"]:
                 state_key = (shard, lane, token)
                 if state_key in self.states:
@@ -229,10 +251,53 @@ class Plant(Owner):
 
     def usable(self, key):
         book = self.books[key]
-        return self.healthy_transport(key[1],key[2]) and book.ready and book.uncrossed
+        return (not self.require_source_admission or key in self.admitted_keys and self.active_routes.get((key[0],key[2]))==key) and self.base_usable(key)
+
+    def local_issue(self,shard,lane):
+        if not self.require_local_progress:return None
+        config=getattr(self,"runtime_config",{})
+        queue=self.ingress_queues.get((shard,lane))
+        if queue and (queue.failed or queue.arrivals and (time.monotonic_ns()-queue.arrivals[0])/1e6>config.get("maximum_local_queue_age_ms",1000)):
+            return "LOCAL_QUEUE_BACKLOG"
+        if self.loop_lag_ms>config.get("maximum_event_loop_lag_ms",200):
+            return "EVENT_LOOP_STALL"
+        if self.journal.pending and (time.monotonic_ns()-self.journal.pending[0].trace["journal_enqueue"])/1e6>config.get("maximum_durability_age_ms",1000):
+            return "DURABILITY_STALL"
+
+    def base_usable(self,key):
+        book=self.books[key]
+        return self.healthy_transport(key[1],key[2]) and book.ready and book.uncrossed and not self.local_issue(key[1],key[2])
+
+    def eligibility_reasons(self,key,token):
+        market,shard,lane=key
+        state=self.states[(shard,lane,token)]
+        book=self.books[key]
+        reasons=[]
+        if self.connections.get((shard,lane))!=state["connection"]:reasons.append("SESSION_MISMATCH")
+        if not state["written"]:reasons.append("SUBSCRIPTION_NOT_WRITTEN")
+        if not state["book_seen"] or not book.assets[token]["ready"]:reasons.append("WAIT_NATIVE_BASELINE")
+        if state.get("baseline_session")!=state["connection"]:reasons.append("BASELINE_EPOCH_MISMATCH")
+        if not state["baseline_durable"]:reasons.append("CAPTURE_PENDING_DURABLE")
+        if not uncrossed(book.assets[token]):reasons.append("CROSSED_BOOK")
+        if not all(self.states[(shard,lane,t)]["baseline_durable"] and book.assets[t]["ready"] for t in book.assets):reasons.append("MARKET_PAIR_NOT_READY")
+        proof=self.transports.get((shard,lane),{})
+        if self.require_transport_proof and not self.healthy_transport(shard,lane):
+            reasons.append("RTT_EXCEEDED" if (proof.get("rtt_ms") or 0)>2000 else "PROOF_EXPIRED" if proof.get("healthy") else "WAIT_HEALTHY_PONG")
+        issue=self.local_issue(shard,lane)
+        if issue:reasons.append(issue)
+        if self.require_source_admission and key not in self.admitted_keys:reasons.append("SOURCE_ADMISSION_PENDING")
+        if self.require_source_admission and key in self.admitted_keys and self.active_routes.get((market,lane))!=key:reasons.append("ROUTE_SUPERSEDED")
+        return reasons
+
+    def consider_admission(self,key):
+        if key in self.admission_pending or key in self.admitted_keys or not self.base_usable(key):return
+        if not all(self.states[(key[1],key[2],t)]["baseline_durable"] for t in self.books[key].assets):return
+        self.journal.append("SOURCE_ADMISSION",{"key":list(key),"connection":self.connections[key[1:]],
+            "input_cut":self.journal.offset,"source_book_version":self.books[key].version})
+        self.admission_pending.add(key)
 
     def select(self, market, exclude=None, reason="FIRST_READY"):
-        candidates = [k for k in sorted(self.market_keys.get(market,())) if k != exclude and self.usable(k)]
+        candidates = [k for k in sorted(self.market_keys.get(market,()),key=lambda k:(k[2],-k[1])) if k != exclude and self.usable(k)]
         if candidates:
             key = candidates[0]
             self.selected[market] = key
@@ -253,6 +318,11 @@ class Plant(Owner):
             "connection": connection, "reason": reason})
         if self.connections.get((shard, lane)) != connection:
             return
+        if self.defer_qualification:
+            self.transports[(shard,lane)]={"connection":connection,"healthy":False,"reason":"TRANSPORT_DEAD","proof_mono_ns":time.monotonic_ns()}
+            for key in self.transport_keys.get((shard,lane),()):self.books[key].invalidate()
+            self.dirty_transports.add((shard,lane))
+            return
         for key, book in self.books.items():
             if key[1:] == (shard, lane):
                 book.invalidate()
@@ -260,6 +330,24 @@ class Plant(Owner):
                     self.transition((shard,lane,token), ready=False, status="RECOVERING")
                 if self.selected.get(key[0]) == key:
                     self.select(key[0], exclude=key, reason=reason)
+
+    async def forget_source(self,shard,lane):
+        started=time.monotonic_ns()
+        for key in tuple(self.transport_keys.pop((shard,lane),())):
+            if self.selected.get(key[0])==key:self.select(key[0],exclude=key,reason="SOURCE_SESSION_RETIRED")
+            for token in self.books[key].assets:self.states.pop((shard,lane,token),None)
+            del self.books[key]
+            self.market_keys[key[0]].discard(key)
+            self.admitted_keys.discard(key)
+            self.admission_pending.discard(key)
+            if self.active_routes.get((key[0],lane))==key:self.active_routes.pop((key[0],lane),None)
+            if time.monotonic_ns()-started>2_000_000:
+                await asyncio.sleep(0)
+                started=time.monotonic_ns()
+        self.connections.pop((shard,lane),None)
+        self.connection_epochs.pop((shard,lane),None)
+        self.transports.pop((shard,lane),None)
+        self.ingress_queues.pop((shard,lane),None)
 
     def ingest(self, shard, lane, connection, recv_seq, raw, recv_utc_ns=None, recv_mono_ns=None, ingress=None):
         # Identity assigned before parsing, routing or readiness filters.
@@ -345,10 +433,22 @@ class Plant(Owner):
             self.disconnect(shard,lane,connection,"PARSE_ERROR")
             results.append({"status": "INVALID_RAW_PRESERVED", "error": str(exc)})
         self.journal.append("OBSERVATION_RESULT", {"raw_ref": base_ref, "results": results})
+        raw_rec.trace.update({k:v for k,v in timing.items() if k!="clock_id"})
+        raw_rec.trace["native_book_count"]=sum(r.get("status")=="SNAPSHOT" for r in results)
         return raw_rec
 
     def on_durable(self, rec):
         super().on_durable(rec)
+        if rec.kind=="SOURCE_ADMISSION":
+            key=tuple(rec.body["key"])
+            self.admission_pending.discard(key)
+            if self.connections.get(key[1:])==rec.body["connection"] and self.base_usable(key):
+                old=self.active_routes.get((key[0],key[2]))
+                self.admitted_keys.add(key)
+                self.active_routes[(key[0],key[2])]=key
+                if old is not None and self.selected.get(key[0])==old and old!=key:
+                    self.select(key[0],reason="CANDIDATE_ADMITTED")
+                self.dirty_transports.add(key[1:])
         if rec.kind == "PLANT_EMIT":
             self._committed_meta[rec.body["market"]] = rec.body
         if rec.kind == "RAW":
@@ -359,15 +459,17 @@ class Plant(Owner):
                     continue
                 current = self.connections.get(key[:2]) == state["connection"]
                 book = self.books[(state["market"], key[0], key[1])].assets[state["token"]]
-                usable = current and self.healthy_transport(key[0],key[1]) and book["ready"] and uncrossed(book)
+                usable = current and self.healthy_transport(key[0],key[1]) and book["ready"] and uncrossed(book) and (not self.require_source_admission or (state["market"],key[0],key[1]) in self.admitted_keys)
                 self.transition(key, baseline_durable=True, ready=usable,
                                 status="READY" if usable else "WAIT_HEALTHY_PONG" if self.require_transport_proof else "RECOVERING")
+                if self.require_source_admission:self.consider_admission((state["market"],key[0],key[1]))
 
 
 class Gateway(Owner):
     def __init__(self, journal, scope, retry_window=4096):
         super().__init__(journal, scope, "TAPE")
         self.shadows, self.sessions, self.selected = {}, {}, {}
+        self.market_plants = {}
         self.session_streams = {}
         self.seen = OrderedDict()
         self.retry_window = retry_window
@@ -393,8 +495,8 @@ class Gateway(Owner):
         self.seen_bytes = sum(len(frame) for frame in self.seen.values())
 
     def choose(self, market, reason="PLANT_SELECT"):
-        candidates = [(p, shadow) for (p,m), shadow in self.shadows.items()
-                      if m == market and shadow["ready"]]
+        candidates = [(p,self.shadows[(p,market)]) for p in sorted(self.market_plants.get(market,()))
+                      if (p,market) in self.shadows and self.shadows[(p,market)]["ready"]]
         if not candidates:
             self.selected.pop(market, None)
             if market in self.working:
@@ -420,8 +522,18 @@ class Gateway(Owner):
                 "seq": item["cut"], "session": session, "snapshot_id": snapshot["snapshot_id"],
                 "quality": deepcopy(item.get("quality",{})),
                 "route": {**item["route"], "plant_session_id": session}}
+            self.market_plants.setdefault(market,set()).add(plant)
             if ready and market not in self.selected:
                 self.choose(market, "CURRENT_SNAPSHOT")
+
+    async def snapshot_async(self,plant,session,snapshot):
+        started=time.monotonic_ns()
+        for item in snapshot["items"]:
+            self.snapshot(plant,session,{**snapshot,"items":[item]})
+            if time.monotonic_ns()-started>2_000_000:
+                await asyncio.sleep(0)
+                started=time.monotonic_ns()
+        self.session_streams[plant]=snapshot["stream"]
 
     def accept(self, plant, session, rec):
         if self.sessions.get(plant) != session:
@@ -445,6 +557,7 @@ class Gateway(Owner):
                 raise ValueError("RESET_REQUIRED")
             shadow = {"assets": {}, "seq": 0, "session": session, "ready": False}
             self.shadows[(plant,market)] = shadow
+            self.market_plants.setdefault(market,set()).add(plant)
         if body["prev_market_seq"] != shadow["seq"] or body["market_seq"] != shadow["seq"]+1:
             raise ValueError("RESET_REQUIRED")
         expected_assets=set(self.scope[market]["assets"])

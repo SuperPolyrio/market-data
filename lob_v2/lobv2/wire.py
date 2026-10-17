@@ -121,8 +121,8 @@ class ByteQueue:
         self.bytes += len(data)
         self.high_water = max(self.bytes, self.high_water)
 
-    async def get(self):
-        if self.failed:
+    async def get(self, *, drain_accepted=False):
+        if self.failed and not drain_accepted:
             raise BufferError("RESYNC_REQUIRED")
         data = await self.queue.get()
         self.arrivals.popleft()

@@ -68,7 +68,10 @@ def uncrossed(asset):
 
 
 def update_level(asset, side, price, size):
-    levels = asset["bids" if side == "BUY" else "asks"]
+    side_name = "bids" if side == "BUY" else "asks"
+    if asset.pop("_shared_"+side_name,False):
+        asset[side_name] = asset[side_name].copy()
+    levels = asset[side_name]
     cache = "_best_bid" if side == "BUY" else "_best_ask"
     best = asset[cache]
     if size:
@@ -103,6 +106,17 @@ class BookState(dict):
     """Owner-private exact levels; sorted arrays exist only at wire/read boundaries."""
 
 
+def freeze_state(state):
+    """Fixed snapshot in O(assets); next mutation copies only a touched shared side."""
+    if not isinstance(state,BookState):
+        return deepcopy(state)
+    frozen=BookState()
+    for token,asset in state.items():
+        frozen[token]=dict(asset)
+        asset["_shared_bids"]=asset["_shared_asks"]=True
+    return frozen
+
+
 def state_view(state):
     if isinstance(state, BookState):
         return {token: asset_view(asset) for token, asset in state.items()}
@@ -131,7 +145,7 @@ def apply_state(state, body, prepared=None):
         if kind == "SNAPSHOT" and len(body["assets"]) != 1:
             raise ValueError("ASSET_SNAPSHOT_SCOPE")
         source = prepared if prepared is not None else prepare_record(body)
-        replacements = {token: {**asset, "bids": asset["bids"].copy(), "asks": asset["asks"].copy()}
+        replacements = {token: {**{k:v for k,v in asset.items() if not k.startswith("_shared_")}, "bids": asset["bids"].copy(), "asks": asset["asks"].copy()}
                         for token, asset in source.items()}
         if kind == "SNAPSHOT":
             state.update(replacements)

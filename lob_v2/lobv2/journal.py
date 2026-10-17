@@ -26,12 +26,12 @@ def sync_dir(path):
         os.close(fd)
 
 
-def atomic_json(path, value):
+def atomic_json(path, value, *, encoder=json_bytes):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(path.name + ".tmp-" + str(uuid.uuid4()))
     with tmp.open("xb") as out:
-        out.write(json_bytes(value))
+        out.write(encoder(value))
         out.flush()
         os.fsync(out.fileno())
     os.replace(tmp, path)

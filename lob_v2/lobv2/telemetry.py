@@ -35,7 +35,10 @@ class Metrics:
             ("normalized_to_commit","normalized_record_created","committed_apply_end")):
             if start in t and end in t:
                 duration = (t[end]-t[start])/1e6
-                self.observe(name,duration)
+                if name=="recv_to_commit" and rec.body.get("kind")=="SOURCE_RESET":
+                    self.observe("baseline_input_to_reset_commit",duration)
+                else:
+                    self.observe(name,duration)
                 if name == "normalized_to_commit":
                     self.observe(name+":"+rec.body["kind"],duration)
 

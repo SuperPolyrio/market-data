@@ -700,8 +700,8 @@ def test_progressing_initial_dump_is_not_discarded_for_delayed_pong(tmp_path,mon
         await asyncio.sleep(.15)
         assert not socket.closed and plant.raw_received>4
         assert socket.pings>=5  # delayed PONG must not stop the heartbeat cadence
-        assert plant.transports[(0,0)]['rtt_ms']>50
-        assert not plant.transports[(0,0)]['healthy']  # oldest outstanding PING, not latest
+        assert plant.transports[(0,0)]['rtt_ms'] is None
+        assert not plant.transports[(0,0)]['healthy']  # ambiguous late PONG cannot refresh proof
         stop.set();task.cancel();await asyncio.gather(task,return_exceptions=True);await journal.close()
     asyncio.run(run())
 
@@ -722,36 +722,58 @@ def test_cancelled_connection_tasks_do_not_reserve_future_startup_minutes(tmp_pa
 
 
 def test_progressing_stale_lane_requests_new_native_baseline(tmp_path,monkeypatch):
-    import asyncio
-    from lobv2.core import Plant
-    from lobv2.journal import Journal,read_journal
+    from lobv2.node import lane_loop,qualification_loop
     import lobv2.node as node
-    scope={'markets':[{'market':'m','assets':['1','2'],'version':'1','asset_id_kind':'CLOB_TOKEN_ID'}]}
+    sockets=[]
     class Socket:
-        closed=False
+        def __init__(self):
+            self.index=len(sockets);sockets.append(self);self.closed=False;self.pings=0;self.pongs=0;self.sent_book=False;self.provide_pongs=True
         async def __aenter__(self):return self
         async def __aexit__(self,*args):pass
-        async def send(self,data):pass
+        async def send(self,data):
+            if data=='PING':
+                self.pings+=1
+                if self.index or self.provide_pongs:self.pongs+=1
         async def close(self,**kwargs):self.closed=True
         def __aiter__(self):return self
         async def __anext__(self):
-            await asyncio.sleep(.005)
+            await asyncio.sleep(.003)
             if self.closed:raise StopAsyncIteration
-            return json.dumps([{'event_type':'book','market':'m','asset_id':t,'bids':[],'asks':[]} for t in ['1','2']])
-    socket=Socket();monkeypatch.setattr(node.websockets,'connect',lambda *args,**kwargs:socket)
+            if not self.sent_book:
+                self.sent_book=True
+                return json.dumps(FIXTURE[:2])
+            if self.pongs:
+                self.pongs-=1
+                return 'PONG'
+            return '{}'
+    monkeypatch.setattr(node.websockets,'connect',lambda *args,**kwargs:Socket())
     async def run():
-        journal=Journal(tmp_path/'j','P','capture');plant=Plant(journal,scope);stop=asyncio.Event()
-        config={'outbound_proxy':'direct','ws_max_bytes':1024,'queue_bytes':16777216,'heartbeat_seconds':.01,
-            'pong_timeout_seconds':1,'first_snapshot_timeout_seconds':100,
-            'backlog_reconnect_grace_seconds':.03,'maximum_receive_backlog_seconds':.02}
-        task=asyncio.create_task(node.lane_loop(plant,0,0,scope['markets'],config,stop))
-        await asyncio.sleep(.1)
-        assert socket.closed and plant.raw_received>2
-        assert not plant.books[('m',0,0)].ready
-        stop.set();task.cancel();await asyncio.gather(task,return_exceptions=True);await journal.close()
-        records=[r for p in (tmp_path/'j').glob('*.journal') for r in read_journal(p)]
+        journal=Journal(tmp_path/'j','P','capture');plant=Plant(journal,SCOPE);stop=asyncio.Event()
+        config={'outbound_proxy':'direct','ws_max_bytes':1024,'queue_bytes':MAX_RECORD,'heartbeat_seconds':.01,
+            'pong_timeout_seconds':1,'first_snapshot_timeout_seconds':2,'maximum_healthy_rtt_ms':100,
+            'backlog_reconnect_grace_seconds':.03,'recovery_poll_seconds':.005,'recovery_lock_root':str(tmp_path/'budget')}
+        plant.runtime_config=config;plant.require_transport_proof=True;plant.require_source_admission=True;plant.defer_qualification=True
+        tasks=[asyncio.create_task(journal.run(stop,.002)),asyncio.create_task(qualification_loop(plant,stop)),
+               asyncio.create_task(lane_loop(plant,0,0,SCOPE['markets'],config,stop))]
+        for _ in range(200):
+            if plant.committed.get('m') and all(a['ready'] for a in plant.committed['m'].values()):break
+            await asyncio.sleep(.01)
+        assert plant.selected.get('m')==('m',0,0) and plant._committed_route('m')['connection']==plant.connections[(0,0)]
+        sockets[0].provide_pongs=False
+        for _ in range(100):
+            if len(sockets)>=2 and sockets[0].closed and plant.selected.get('m',('m',0,0))[1]>=1_000_000 and plant.usable(plant.selected['m']):break
+            await asyncio.sleep(.02)
+        assert len(sockets)>=2 and sockets[0].closed, {"selected":plant.selected,"active":plant.active_routes,"proofs":plant.transports,"states":list(plant.states.values()),"tasks":[repr(t.exception()) if t.done() and not t.cancelled() else "running" for t in tasks]}
+        assert plant.selected['m'][1]>=1_000_000 and plant.usable(plant.selected['m'])
+        stop.set()
+        for task in tasks:task.cancel()
+        await asyncio.gather(*tasks,return_exceptions=True);await journal.close()
+        records=[r for path in (tmp_path/'j').glob('*.journal') for r in read_journal(path)]
         assert sum(r.kind=='RAW' for r in records)==plant.raw_received
-        assert any(r.kind=='BACKLOG_RESYNC' for r in records)
+        assert any(r.kind=='SOCKET_RETIRED' and r.body['reason']=='ALL_MARKETS_TRANSFERRED' for r in records)
+        for connection in {r.body['connection'] for r in records if r.kind=='RAW'}:
+            seq=[r.body['recv_seq'] for r in records if r.kind=='RAW' and r.body['connection']==connection]
+            assert seq==list(range(1,len(seq)+1))
     asyncio.run(run())
 
 

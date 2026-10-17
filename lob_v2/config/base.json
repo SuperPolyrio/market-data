@@ -1,0 +1,22 @@
+{
+  "lanes": 2,
+  "assets_per_connection": 250,
+  "ws_max_bytes": 8388608,
+  "queue_bytes": 67108864,
+  "segment_bytes": 268435456,
+  "segment_seconds": 60,
+  "group_fsync_ms": 20,
+  "heartbeat_seconds": 10,
+  "pong_timeout_seconds": 30,
+  "first_snapshot_timeout_seconds": 20,
+  "outbound_proxy": "env",
+  "listen": {
+    "host": "127.0.0.1",
+    "port": 19101,
+    "queue_bytes": 67108864
+  },
+  "require_transport_proof": true,
+  "prefer_primary_lane": true,
+  "maximum_healthy_rtt_ms": 2000,
+  "transport_proof_max_age_seconds": 30
+}
