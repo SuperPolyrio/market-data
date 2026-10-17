@@ -1,0 +1,3 @@
+{"event_type":"book","market":"m","asset_id":"1","bids":[{"price":"0.50","size":"10"}],"asks":[{"price":"0.8","size":"20"}],"timestamp":"123","hash":"same"}
+{"event_type":"book","market":"m","asset_id":"2","bids":[],"asks":[],"timestamp":"123","hash":"same"}
+{"event_type":"price_change","market":"m","price_changes":[{"asset_id":"1","price":"0.5","size":"15","side":"BUY","hash":"same"},{"asset_id":"1","price":"0.50","size":"0","side":"BUY","hash":"same"}],"timestamp":"123"}

@@ -1,0 +1,14 @@
+syntax = "proto3";
+package polymarket.lob.v2;
+// body is versioned UTF-8 JSON. Prices, sizes and native IDs are strings.
+// raw contains exact application-message bytes, never reconstructed JSON.
+message Envelope {
+  uint32 schema_version = 1;
+  string kind = 2;
+  string producer = 3;
+  string stream = 4;
+  uint64 offset = 5;
+  uint64 created_utc_ns = 6;
+  bytes body = 7;
+  bytes raw = 8;
+}
