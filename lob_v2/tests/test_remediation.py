@@ -250,3 +250,61 @@ def test_partial_candidate_never_retires_socket_still_serving_other_market(tmp_p
             await j.close()
         assert not [r for r in results if isinstance(r,Exception)]
     asyncio.run(run())
+
+
+def test_streamed_decoder_keeps_exact_numbers_and_rejects_entire_bad_frame(tmp_path):
+    import json
+    from lobv2.core import decode_events
+    from test_semantics import make_plant,FIXTURE
+    async def run():
+        raw=b' [ {"price":0.12345678901234567890123456789}, {}, [1,2] ] '
+        assert await decode_events(raw)==json.loads(raw,parse_float=str)
+        for raw in [b'[] garbage',b'[{},]',b'[{}',b'[,{}]',b'']:
+            with pytest.raises(ValueError):await decode_events(raw)
+        p=make_plant(tmp_path)
+        raw=('['+json.dumps(FIXTURE[0])+','+json.dumps(FIXTURE[1])+',]').encode()
+        await p.ingest_async(0,0,'c0',1,raw)
+        assert not p.working and p.parse_errors==1
+        await p.journal.close()
+        assert [r.raw for path in p.journal.root.glob('*.journal') for r in read_journal(path) if r.kind=='RAW']==[raw]
+    asyncio.run(run())
+
+
+def test_durable_raw_before_async_book_parse_still_releases_baselines(tmp_path):
+    import json
+    from test_semantics import make_plant,FIXTURE
+    async def run():
+        p=make_plant(tmp_path)
+        raw=json.dumps(FIXTURE[:2]*1000).encode()
+        stop=asyncio.Event();sync=asyncio.create_task(p.journal.run(stop,.001))
+        rec=await p.ingest_async(0,0,'c0',1,raw)
+        await p.journal.sync()
+        assert all(s['baseline_durable'] for key,s in p.states.items() if key[1]==0)
+        assert all(s['baseline_capture_durable_ref']['record_sequence']==rec.offset for key,s in p.states.items() if key[1]==0)
+        assert p.working and not p.baseline_pending
+        stop.set();await sync;await p.journal.close()
+    asyncio.run(run())
+
+
+def test_lifecycle_outbox_has_original_durable_capture_identity(tmp_path):
+    import json
+    from test_semantics import make_plant
+    from lobv2.wire import FRAME,decode
+    async def run():
+        p=make_plant(tmp_path)
+        event={'event_type':'market_resolved','market':'unknown-but-resolved','id':'999'}
+        raw=json.dumps(event).encode()
+        rec=await p.ingest_async(0,0,'c0',1,raw)
+        await p.journal.sync()
+        progress=json.loads(next((p.journal.root.parent/'lifecycle').glob('*.progress.json')).read_bytes())
+        data=open(progress['path'],'rb').read()
+        assert len(data)==progress['durable_bytes']
+        notification=decode(data)
+        assert notification.body['event']==event
+        assert notification.body['capture_durable_receipt']['record_sequence']==rec.offset
+        assert notification.body['capture_durable_receipt']['log_generation']==rec.stream
+        await p.journal.close()
+        records=[r for f in p.journal.root.glob('*.journal') for r in read_journal(f)]
+        assert next(r for r in records if r.kind=='RAW').raw==raw
+        assert next(r for r in records if r.kind=='LIFECYCLE_CAPTURED').body['raw_ref']['capture_offset']==rec.offset
+    asyncio.run(run())

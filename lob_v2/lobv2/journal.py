@@ -113,6 +113,8 @@ class Journal:
         self.stage_samples = deque(maxlen=4096)
         self.admission_failure = None
         self.metrics = Metrics()
+        self.lifecycle_fd=None
+        self.lifecycle_sequence=0
         self._open()
 
     def _open(self, first_offset=None):
@@ -194,7 +196,27 @@ class Journal:
         start = time.monotonic_ns()
         os.fdatasync(self.fd)
         end = time.monotonic_ns()
+        notifications=[(rec.prepared,rec.body['event'],rec.body['raw_ref']) for rec in records if rec.kind=='LIFECYCLE_CAPTURED']
+        if notifications:
+            self._write_lifecycle(notifications)
         return start, end
+
+    def _write_lifecycle(self,notifications):
+        directory=self.root.parent/'lifecycle';directory.mkdir(exist_ok=True)
+        path=directory/(self.stream+'.frames')
+        if self.lifecycle_fd is None:self.lifecycle_fd=os.open(path,os.O_CREAT|os.O_EXCL|os.O_WRONLY,0o600)
+        for source,event,ref in notifications:
+            self.lifecycle_sequence+=1
+            rec=encode('CATALOG_LIFECYCLE',self.producer,self.stream,self.lifecycle_sequence,
+                {'event':event,'raw_ref':ref,'capture_durable_receipt':source.trace['receipt'],'durability':'LOCAL_DURABLE'})
+            view=memoryview(rec.frame)
+            while view:
+                wrote=os.write(self.lifecycle_fd,view)
+                if wrote<=0:raise OSError('LIFECYCLE_SHORT_WRITE')
+                view=view[wrote:]
+        os.fdatasync(self.lifecycle_fd)
+        atomic_json(directory/(self.stream+'.progress.json'),{'stream':self.stream,'producer':self.producer,
+            'path':str(path),'durable_bytes':os.lseek(self.lifecycle_fd,0,os.SEEK_CUR),'records':self.lifecycle_sequence})
 
     def _seal_file(self):
         os.fdatasync(self.fd)
@@ -202,6 +224,10 @@ class Journal:
         self.fd = None
         os.rename(self.path, self.path.with_suffix(".journal"))
         sync_dir(self.root)
+
+    def _rotate_idle(self):
+        self._seal_file()
+        self._open()
 
     async def sync(self):
         async with self._sync_lock:
@@ -282,8 +308,11 @@ class Journal:
             if self.segment_records and not self.pending and time.monotonic()-self.opened >= self.max_age:
                 async with self._sync_lock:
                     # No new writes run concurrently with the rotation barrier.
-                    await asyncio.get_running_loop().run_in_executor(self._io,self._seal_file)
-                    await asyncio.get_running_loop().run_in_executor(self._io,self._open)
+                    future=asyncio.get_running_loop().run_in_executor(self._io,self._rotate_idle)
+                    try:await asyncio.shield(future)
+                    except asyncio.CancelledError:
+                        await future
+                        raise
         await self.sync()
 
     async def close(self):
@@ -298,6 +327,7 @@ class Journal:
                 os.rename(self.path,self.path.with_suffix(".empty"))
                 sync_dir(self.root)
         self.closed = True
+        if self.lifecycle_fd is not None:os.close(self.lifecycle_fd)
         self._io.shutdown(wait=True)
 
 

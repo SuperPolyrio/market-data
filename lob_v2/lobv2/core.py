@@ -5,11 +5,52 @@ import json
 import time
 import uuid
 import asyncio
+import heapq
 
 from .book import SourceBook, apply_state as apply, inspect, state_view, prepare_record, ChangeGroup, uncrossed, freeze_state
 from .wire import ByteQueue
 
 POLICY = "single_healthy_route_v2.0.1"
+
+
+async def decode_events(raw):
+    """Parse once; validate the complete frame before exposing any native group.
+
+    Initial dumps contain many independent events. Their decode boundaries are
+    safe scheduling points; an individual price_change remains indivisible.
+    """
+    if raw==b"PONG":return []
+    text=raw.decode(json.detect_encoding(raw))
+    decoder=json.JSONDecoder(parse_float=str)
+    size=len(text)
+    def whitespace(index):
+        while index<size and text[index] in ' \r\n\t':index+=1
+        return index
+    position=whitespace(0)
+    if position==size:raise ValueError("EMPTY_NATIVE_JSON")
+    if text[position]!='[':
+        value,end=decoder.raw_decode(text,position)
+        if whitespace(end)!=size:raise ValueError("TRAILING_NATIVE_JSON")
+        return [value]
+    values=[]
+    position=whitespace(position+1)
+    if position<size and text[position]==']':
+        if whitespace(position+1)!=size:raise ValueError("TRAILING_NATIVE_JSON")
+        return values
+    started=time.monotonic_ns()
+    while position<size:
+        value,end=decoder.raw_decode(text,position)
+        values.append(value)
+        position=whitespace(end)
+        if position<size and text[position]==']':
+            if whitespace(position+1)!=size:raise ValueError("TRAILING_NATIVE_JSON")
+            return values
+        if position>=size or text[position]!=',':raise ValueError("INVALID_NATIVE_ARRAY")
+        position=whitespace(position+1)
+        if time.monotonic_ns()-started>2_000_000:
+            await asyncio.sleep(0)
+            started=time.monotonic_ns()
+    raise ValueError("INCOMPLETE_NATIVE_ARRAY")
 
 
 class Owner:
@@ -131,6 +172,8 @@ class Plant(Owner):
         self.history = deque(maxlen=65536)
         self.start_mono_ns = time.monotonic_ns()
         self.ingress_queues = {}
+        self.inflight_inputs = {}
+        self.lifecycle_seen=OrderedDict()
         self.loop_lag_ms = 0.
         self.defer_qualification = False
         self.dirty_transports = set()
@@ -141,7 +184,7 @@ class Plant(Owner):
         self.require_local_progress = False
         self.admission_pending = set()
         self.dispositions = {}
-        self.baseline_pending = deque()
+        self.baseline_pending = []
         self.require_transport_proof = False
         self.prefer_primary_lane = False
         self.maximum_transport_age_ns = 30*10**9
@@ -256,6 +299,8 @@ class Plant(Owner):
     def local_issue(self,shard,lane):
         if not self.require_local_progress:return None
         config=getattr(self,"runtime_config",{})
+        inflight=self.inflight_inputs.get((shard,lane))
+        if inflight and (time.monotonic_ns()-inflight)/1e6>config.get("maximum_local_queue_age_ms",1000):return "LOCAL_QUEUE_BACKLOG"
         queue=self.ingress_queues.get((shard,lane))
         if queue and (queue.failed or queue.arrivals and (time.monotonic_ns()-queue.arrivals[0])/1e6>config.get("maximum_local_queue_age_ms",1000)):
             return "LOCAL_QUEUE_BACKLOG"
@@ -306,7 +351,8 @@ class Plant(Owner):
                 "input_timing":getattr(self.books[key],"input_timing",{}),
                 "source_book_version":self.books[key].version,
                 "input_cut":{"log_id":self.journal.producer+":"+self.journal.kind,
-                    "log_generation":self.journal.stream,"record_sequence":self.journal.offset},
+                    "log_generation":self.journal.stream,"record_sequence":self.journal.offset,
+                    "native_observation_ref":getattr(self.books[key],"last_input_ref",None)},
                 "quality": {"continuity_unknown": True, "upstream_completeness": "UNKNOWN"}},
                 self.route(key), reset=True)
         self.selected.pop(market, None)
@@ -349,7 +395,41 @@ class Plant(Owner):
         self.transports.pop((shard,lane),None)
         self.ingress_queues.pop((shard,lane),None)
 
-    def ingest(self, shard, lane, connection, recv_seq, raw, recv_utc_ns=None, recv_mono_ns=None, ingress=None):
+    def ingest(self,*args,**kwargs):
+        steps=self._ingest_steps(*args,**kwargs)
+        rec=next(steps)
+        raw=rec.raw
+        try:
+            events=[] if raw==b"PONG" else json.loads(raw,parse_float=str)
+            events=events if isinstance(events,list) else [events]
+        except (ValueError,KeyError,TypeError) as exc:
+            try:steps.throw(exc)
+            except StopIteration:return rec
+        try:
+            steps.send(events)
+            while True:next(steps)
+        except StopIteration:return rec
+
+    async def ingest_async(self,*args,**kwargs):
+        steps=self._ingest_steps(*args,**kwargs)
+        rec=next(steps)
+        try:
+            events=await decode_events(rec.raw)
+        except (ValueError,KeyError,TypeError) as exc:
+            try:steps.throw(exc)
+            except StopIteration:return rec
+        started=time.monotonic_ns()
+        try:
+            steps.send(events)
+            while True:
+                self.release_baselines(self.journal.durable_offset)
+                if time.monotonic_ns()-started>2_000_000:
+                    await asyncio.sleep(0)
+                    started=time.monotonic_ns()
+                next(steps)
+        except StopIteration:return rec
+
+    def _ingest_steps(self, shard, lane, connection, recv_seq, raw, recv_utc_ns=None, recv_mono_ns=None, ingress=None):
         # Identity assigned before parsing, routing or readiness filters.
         meta = {"shard": shard, "lane": lane, "connection": connection, "recv_seq": recv_seq,
                 "connection_epoch": self.connection_epochs.get((shard,lane)) if self.connections.get((shard,lane))==connection else "STALE_UNKNOWN",
@@ -365,25 +445,29 @@ class Plant(Owner):
                     "connection": connection, "recv_seq": recv_seq, "capture_offset": raw_rec.offset}
         results = []
         try:
-            if raw == b"PONG":
-                events = []
-                results.append({"status": "HEARTBEAT"})
-            else:
-                timing["parse_start"] = time.monotonic_ns()
-                events = json.loads(raw, parse_float=str)
-                timing["parse_end"] = time.monotonic_ns()
-                events = events if isinstance(events, list) else [events]
+            timing["parse_start"] = time.monotonic_ns()
+            events = yield raw_rec
+            timing["parse_end"] = time.monotonic_ns()
+            if raw == b"PONG":results.append({"status":"HEARTBEAT"})
             for index, event in enumerate(events):
                 ref = {**base_ref, "top_level_message_index": index}
                 if self.connections.get((shard,lane)) != connection:
                     results.append({"status": "STALE_CONNECTION", "raw_ref": ref})
+                    yield None
                     continue
                 if not isinstance(event, dict):
                     raise ValueError("INVALID_EVENT")
                 market = event.get("market")
+                if event.get("event_type") in ('new_market','market_resolved'):
+                    action=(market,event['event_type'])
+                    if action not in self.lifecycle_seen:
+                        self.journal.append('LIFECYCLE_CAPTURED',{'event':event,'raw_ref':ref},prepared=raw_rec)
+                        self.lifecycle_seen[action]=True
+                        if len(self.lifecycle_seen)>4096:self.lifecycle_seen.popitem(last=False)
                 key = (market, shard, lane)
                 if key not in self.books:
                     results.append({"status": "UNKNOWN_MARKET_OR_CONTROL", "raw_ref": ref})
+                    yield None
                     continue
                 try:
                     timing["source_apply_start"] = time.monotonic_ns()
@@ -391,6 +475,7 @@ class Plant(Owner):
                     timing["source_apply_end"] = time.monotonic_ns()
                     normalized["input_timing"] = dict(timing)
                     self.books[key].input_timing = dict(timing)
+                    self.books[key].last_input_ref = ref
                 except (ValueError, KeyError, TypeError) as exc:
                     self.books[key].invalidate()
                     for token in self.books[key].assets:
@@ -400,6 +485,7 @@ class Plant(Owner):
                         self.select(market, exclude=key, reason="INVALID_GROUP")
                     results.append({"status": "INVALID_RAW_PRESERVED", "error": str(exc), "raw_ref": ref})
                     self.parse_errors += 1
+                    yield None
                     continue
                 kind = normalized["kind"]
                 if kind == "SNAPSHOT":
@@ -407,7 +493,7 @@ class Plant(Owner):
                     self.states[(shard,lane,token)].update(book_seen=True,
                         book_seen_ns=raw_rec.created_ns, baseline_offset=raw_rec.offset,
                         baseline_ref=ref, baseline_session=connection, status="BASELINE_PENDING_DURABLE")
-                    self.baseline_pending.append((raw_rec.offset, (shard,lane,token)))
+                    heapq.heappush(self.baseline_pending,(raw_rec.offset, (shard,lane,token),raw_rec))
                 if kind in ("SNAPSHOT", "CHANGE_GROUP"):
                     if self.usable(key):
                         for token in self.books[key].assets:
@@ -428,6 +514,7 @@ class Plant(Owner):
                     else:
                         self.nonselected += 1
                 results.append({"status": kind, "raw_ref": ref})
+                yield None
         except (ValueError, KeyError, TypeError) as exc:
             self.parse_errors += 1
             self.disconnect(shard,lane,connection,"PARSE_ERROR")
@@ -435,6 +522,8 @@ class Plant(Owner):
         self.journal.append("OBSERVATION_RESULT", {"raw_ref": base_ref, "results": results})
         raw_rec.trace.update({k:v for k,v in timing.items() if k!="clock_id"})
         raw_rec.trace["native_book_count"]=sum(r.get("status")=="SNAPSHOT" for r in results)
+        self.release_baselines(self.journal.durable_offset)
+        self.journal.metrics.observe("frame_processing",(time.monotonic_ns()-meta["recv_mono_ns"])/1e6)
         return raw_rec
 
     def on_durable(self, rec):
@@ -451,18 +540,20 @@ class Plant(Owner):
                 self.dirty_transports.add(key[1:])
         if rec.kind == "PLANT_EMIT":
             self._committed_meta[rec.body["market"]] = rec.body
-        if rec.kind == "RAW":
-            while self.baseline_pending and self.baseline_pending[0][0] <= rec.offset:
-                offset, key = self.baseline_pending.popleft()
-                state = self.states[key]
-                if state.get("baseline_offset") != offset:
-                    continue
-                current = self.connections.get(key[:2]) == state["connection"]
-                book = self.books[(state["market"], key[0], key[1])].assets[state["token"]]
-                usable = current and self.healthy_transport(key[0],key[1]) and book["ready"] and uncrossed(book) and (not self.require_source_admission or (state["market"],key[0],key[1]) in self.admitted_keys)
-                self.transition(key, baseline_durable=True, ready=usable,
-                                status="READY" if usable else "WAIT_HEALTHY_PONG" if self.require_transport_proof else "RECOVERING")
-                if self.require_source_admission:self.consider_admission((state["market"],key[0],key[1]))
+        if rec.kind == "RAW":self.release_baselines(rec.offset)
+
+    def release_baselines(self,cut):
+        while self.baseline_pending and self.baseline_pending[0][0] <= cut:
+            offset, key, raw_record = heapq.heappop(self.baseline_pending)
+            state = self.states[key]
+            if state.get("baseline_offset") != offset:
+                continue
+            current = self.connections.get(key[:2]) == state["connection"]
+            book = self.books[(state["market"], key[0], key[1])].assets[state["token"]]
+            usable = current and self.healthy_transport(key[0],key[1]) and book["ready"] and uncrossed(book) and (not self.require_source_admission or (state["market"],key[0],key[1]) in self.admitted_keys)
+            self.transition(key, baseline_durable=True, baseline_capture_durable_ref=raw_record.trace.get("receipt"), ready=usable,
+                            status="READY" if usable else "WAIT_HEALTHY_PONG" if self.require_transport_proof else "RECOVERING")
+            if self.require_source_admission:self.consider_admission((state["market"],key[0],key[1]))
 
 
 class Gateway(Owner):

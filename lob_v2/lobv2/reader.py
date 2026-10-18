@@ -85,14 +85,18 @@ class Session:
                 item=await asyncio.wait_for(self.inbox.get(drain_accepted=True),.1)
             except asyncio.TimeoutError:
                 continue
-            self.process_one(item)
+            await self.process_one(item)
             await asyncio.sleep(0)
         if self.overflow is not None:
-            self.process_one(self.overflow)
+            await self.process_one(self.overflow)
 
-    def process_one(self,item):
-        rec=self.plant.ingest(self.shard,self.lane,self.connection,item.sequence,item.raw,item.utc,item.received,
-            {"ingress_enqueue":item.enqueued,"ingress_dequeue":time.monotonic_ns()})
+    async def process_one(self,item):
+        self.plant.inflight_inputs[(self.shard,self.lane)]=item.received
+        try:
+            rec=await self.plant.ingest_async(self.shard,self.lane,self.connection,item.sequence,item.raw,item.utc,item.received,
+                {"ingress_enqueue":item.enqueued,"ingress_dequeue":time.monotonic_ns()})
+        finally:
+            self.plant.inflight_inputs.pop((self.shard,self.lane),None)
         if rec.trace.get("native_book_count"):
             self.last_baseline=time.monotonic()
             self.baseline_frame_bytes+=len(item.raw)
