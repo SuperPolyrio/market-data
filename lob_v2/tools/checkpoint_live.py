@@ -57,9 +57,15 @@ def save(snapshot,node,output):
 
 async def capture(deployment,output):
     report=[]
+    data_root=Path(json.loads((deployment/'settings.json').read_bytes())['data_root'])
     for path in sorted((deployment/'instances').glob('G-*.json')):
         instance=json.loads(path.read_bytes());node=instance['node_id'];writer=None
         try:
+            status=json.loads((data_root/node/'summary.json').read_bytes())
+            version=tuple(int(v) for v in status.get('provenance',{}).get('code_version','0').split('.'))
+            if version<(2,2,2):
+                report.append({'producer':node,'status':'NOT_SUPPORTED_BY_SOURCE_VERSION','version':list(version)})
+                continue
             endpoint=instance['config']['listen']
             reader,writer=await asyncio.wait_for(asyncio.open_connection(endpoint['host'],endpoint['port']),5)
             await send(writer,control('HELLO',{'schema':2,'role':'checkpoint'}))

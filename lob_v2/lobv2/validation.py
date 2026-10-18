@@ -40,10 +40,18 @@ def reference_sources(records, scope, cutoff):
         elif rec.kind == "CONNECT":
             slot = (body["shard"],body["lane"])
             active[slot] = body["connection"]
-            # Shard membership is identified by subsequent raw market incidence.
+            # Older streams have no assignment record; missing empty books remain
+            # a visible audit limitation rather than inferred successful coverage.
             for key in list(states):
                 if key[1:] == slot:
                     del states[key]
+        elif rec.kind == 'SOURCE_ASSIGNED':
+            slot=(body['shard'],body['lane'])
+            if active.get(slot)==body['connection']:
+                for market in body['markets']:
+                    states[(market['market'],*slot)]={token:{'bids':{},'asks':{},'ready':False,
+                        'snapshot_epoch':0,'last_source_time':None,'baseline_ref':None,'last_ref':None}
+                        for token in market['assets']}
         elif rec.kind=='SOURCE_STATE_RELEASED':
             states.pop((body['market'],body['shard'],body['lane']),None)
         elif rec.kind == "DISCONNECT":

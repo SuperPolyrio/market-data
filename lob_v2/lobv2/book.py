@@ -112,8 +112,8 @@ def freeze_state(state):
         return deepcopy(state)
     frozen=BookState()
     for token,asset in state.items():
-        frozen[token]=dict(asset)
         asset["_shared_bids"]=asset["_shared_asks"]=True
+        frozen[token]=dict(asset)
     return frozen
 
 
@@ -121,6 +121,12 @@ def state_view(state):
     if isinstance(state, BookState):
         return {token: asset_view(asset) for token, asset in state.items()}
     return deepcopy(state)
+
+
+def prepare_state_copy(state):
+    """Fix a RESET input in exact levels; copy here, never during normal deltas."""
+    return BookState({token:{**{k:v for k,v in asset.items() if not k.startswith('_shared_')},
+        'bids':asset['bids'].copy(),'asks':asset['asks'].copy()} for token,asset in state.items()})
 
 
 def prepare_record(body):
@@ -145,8 +151,7 @@ def apply_state(state, body, prepared=None):
         if kind == "SNAPSHOT" and len(body["assets"]) != 1:
             raise ValueError("ASSET_SNAPSHOT_SCOPE")
         source = prepared if prepared is not None else prepare_record(body)
-        replacements = {token: {**{k:v for k,v in asset.items() if not k.startswith("_shared_")}, "bids": asset["bids"].copy(), "asks": asset["asks"].copy()}
-                        for token, asset in source.items()}
+        replacements = prepare_state_copy(source)
         if kind == "SNAPSHOT":
             state.update(replacements)
         else:

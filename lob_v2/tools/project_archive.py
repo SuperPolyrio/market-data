@@ -105,13 +105,13 @@ def watch(deployment,output,partition=0,partitions=1):
         pending.sort(key=lambda pair:(pair[1]['manifest']['first']!=1,pair[1].get('committed_utc_ns',0)))
         with db:db.executemany('INSERT OR IGNORE INTO queued VALUES (?,?)',((row['manifest_key'],time.time_ns()) for _,row in pending))
         oldest=db.execute('SELECT MIN(first_seen_ns) FROM queued').fetchone()[0]
-        queue={'utc_ns':time.time_ns(),'pending_segments':len(pending),
+        queue={'utc_ns':time.time_ns(),'inventory_utc_ns':time.time_ns(),'pending_segments':len(pending),
             'pending_input_object_bytes':sum(r['manifest']['object_bytes'] for _,r in pending),
             'oldest_pending_seconds':(time.time_ns()-oldest)/1e9 if oldest else 0,
             'completed_segments':len(done),'scope':'ALL_COMMITTED_PRODUCTION_ARCHIVES',
             'partition':partition,'partitions':partitions,'age_basis':'WORKER_QUEUE_FIRST_OBSERVED_FOR_HISTORICAL_INPUTS'}
         atomic_json(output/'queue.json',queue)
-        for path,row in pending:
+        for path,row in pending[:64]:
             try:
                 if row.pop('lazy_manifest',False):row['manifest']=json.loads(read(row['manifest_key']))
                 result=project(settings,[row],output)
@@ -126,7 +126,9 @@ def watch(deployment,output,partition=0,partitions=1):
                         'completed_segments':db.execute('SELECT COUNT(*) FROM done').fetchone()[0],
                         'streams':{key:progress(rows,max(r['last'] for r in rows)) for key,rows in streams.items()},
                         'contract':'QUERY_COMPLETION_SEPARATE_FROM_REMOTE_ARCHIVED'})
-                    queue['utc_ns']=time.time_ns();atomic_json(output/'queue.json',queue)
+                    oldest=db.execute('SELECT MIN(first_seen_ns) FROM queued').fetchone()[0]
+                    queue['utc_ns']=time.time_ns();queue['oldest_pending_seconds']=(time.time_ns()-oldest)/1e9 if oldest else 0
+                    atomic_json(output/'queue.json',queue)
                     last_progress=time.monotonic()
             except Exception as exc:
                 atomic_json(output/'error.json',{'utc_ns':time.time_ns(),'input':str(path),'error':repr(exc),'action':'INPUT_RETAINED_RETRY_PENDING'})

@@ -375,3 +375,21 @@ def test_fault_relay_closes_active_connection_before_waiting_for_server_shutdown
         assert await asyncio.wait_for(reader.read(1),1)==b''
         writer.close();await writer.wait_closed();server.close();await server.wait_closed()
     asyncio.run(run())
+
+
+def test_independent_replay_accounts_for_assigned_unsent_candidate_books(tmp_path):
+    from lobv2.core import Plant
+    from lobv2.book import digest
+    from lobv2.validation import reference_sources
+    async def run():
+        markets=[{'market':'m','assets':['1','2'],'version':'1','asset_id_kind':'CLOB_TOKEN_ID'}]
+        scope={'markets':markets}
+        journal=Journal(tmp_path,'P','capture');plant=Plant(journal,scope,2)
+        plant.connect(2000000,1,'candidate',1,markets)
+        await journal.sync();await journal.close()
+        records=[r for path in tmp_path.glob('*.journal') for r in read_journal(path)]
+        replay,_=reference_sources(records,scope,max(r.offset for r in records))
+        assert digest(replay['m|2000000|1'])==digest(plant.books[('m',2000000,1)].snapshot())
+        assert all(not s['written'] and not s['ready'] for s in plant.states.values())
+        assert not any(r.kind in ('RAW','PLANT_EMIT','SUBSCRIPTION_WRITE_OK') for r in records)
+    asyncio.run(run())

@@ -56,12 +56,13 @@ def observation_projection(inputs,destination,budget_bytes=32*1024*1024):
         _,source_index,rec=heapq.heappop(heads)
         if bytes_used+len(rec.frame)>budget_bytes or len(occurrences)>=10000:flush()
         prefix=rec.frame;index=-1
+        if rec.kind=='RAW':raw_count+=1;raw_bytes+=len(rec.raw)
         if rec.kind=='RAW' and rec.raw and rec.frame.endswith(rec.raw):
-            raw_count+=1;raw_bytes+=len(rec.raw)
             if rec.raw not in lookup:
                 lookup[rec.raw]=len(payloads);payloads.append({'payload_index':len(payloads),'raw_bytes':rec.raw})
                 unique_bytes+=len(rec.raw);bytes_used+=len(rec.raw)
             index=lookup[rec.raw];prefix=rec.frame[:-len(rec.raw)]
+        elif rec.kind=='RAW':unique_bytes+=len(rec.raw)
         occurrences.append({'producer':rec.producer,'stream':rec.stream,'offset':rec.offset,'kind':rec.kind,
             'created_ns':rec.created_ns,'payload_index':index,'frame_prefix':prefix})
         bytes_used+=len(prefix)+256

@@ -7,7 +7,7 @@ import uuid
 import asyncio
 import heapq
 
-from .book import SourceBook, apply_state as apply, inspect, state_view, prepare_record, ChangeGroup, uncrossed, freeze_state
+from .book import SourceBook, apply_state as apply, inspect, state_view, prepare_record, ChangeGroup, uncrossed, freeze_state, prepare_state_copy
 from .wire import ByteQueue
 
 POLICY = "single_healthy_route_catalog_admission_v2.2.1"
@@ -324,6 +324,10 @@ class Plant(Owner):
 
     def assign(self,shard,lane,connection,epoch,markets):
         if self.connections.get((shard,lane))!=connection:raise ValueError('SESSION_MISMATCH')
+        markets=list(markets)
+        self.journal.append('SOURCE_ASSIGNED',{'shard':shard,'lane':lane,'connection':connection,
+            'connection_epoch':epoch,'catalog_revision':self.catalog_revision,
+            'markets':[{'market':m['market'],'assets':m['assets']} for m in markets]})
         for market in markets:
             key = (market["market"], shard, lane)
             self.books[key] = SourceBook(market["market"], market["assets"])
@@ -419,15 +423,16 @@ class Plant(Owner):
         if candidates:
             key = candidates[0]
             self.selected[market] = key
-            return self.emit(market, {"kind": "SOURCE_RESET", "scope": "MARKET",
+            event=ChangeGroup({"kind": "SOURCE_RESET", "scope": "MARKET",
                 "assets": self.books[key].snapshot(), "reason": reason,
                 "input_timing":getattr(self.books[key],"input_timing",{}),
                 "source_book_version":self.books[key].version,
                 "input_cut":{"log_id":self.journal.producer+":"+self.journal.kind,
                     "log_generation":self.journal.stream,"record_sequence":self.journal.offset,
                     "native_observation_ref":getattr(self.books[key],"last_input_ref",None)},
-                "quality": {"continuity_unknown": True, "upstream_completeness": "UNKNOWN"}},
-                self.route(key), reset=True)
+                "quality": {"continuity_unknown": True, "upstream_completeness": "UNKNOWN"}})
+            event.prepared=prepare_state_copy(self.books[key].assets)
+            return self.emit(market,event,self.route(key),reset=True)
         self.selected.pop(market, None)
         if market in self.working:
             return self.emit(market, {"kind": "GAP", "reason": reason}, self.routes[market])
@@ -671,10 +676,12 @@ class Gateway(Owner):
             return
         plant, shadow = candidates[0]
         self.selected[market] = plant
-        self.emit(market, {"kind": "SOURCE_RESET", "scope": "MARKET", "assets": state_view(shadow["assets"]),
+        event=ChangeGroup({"kind": "SOURCE_RESET", "scope": "MARKET", "assets": state_view(shadow["assets"]),
             "reason": reason, "plant_session_id": shadow["session"],
             "bootstrap_snapshot_id": shadow.get("snapshot_id"), "plant_cut": shadow["seq"],
-            "quality": {**shadow.get("quality",{}),"continuity_unknown": True, "upstream_completeness": "UNKNOWN"}}, shadow["route"], reset=True)
+            "quality": {**shadow.get("quality",{}),"continuity_unknown": True, "upstream_completeness": "UNKNOWN"}})
+        event.prepared=prepare_state_copy(shadow['assets'])
+        self.emit(market,event,shadow["route"],reset=True)
 
     def snapshot(self, plant, session, snapshot):
         if self.sessions.get(plant) != session:
@@ -685,7 +692,7 @@ class Gateway(Owner):
             if market not in self.scope or set(item["assets"]) != set(self.scope[market]["assets"]):
                 raise ValueError("INCOMPLETE_MARKET_SNAPSHOT")
             ready = all(x["ready"] for x in item["assets"].values())
-            self.shadows[(plant,market)] = {"ready": ready, "assets": apply({}, {"kind":"SOURCE_RESET","scope":"MARKET","assets":item["assets"]}),
+            self.shadows[(plant,market)] = {"ready": ready, "assets": prepare_record({"kind":"SOURCE_RESET","scope":"MARKET","assets":item["assets"]}),
                 "seq": item["cut"], "session": session, "snapshot_id": snapshot["snapshot_id"],
                 "quality": deepcopy(item.get("quality",{})),
                 "route": {**item["route"], "plant_session_id": session}}

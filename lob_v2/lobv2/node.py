@@ -342,17 +342,19 @@ async def plant_session(gateway, plant, config, stop):
     while not stop.is_set():
         writer, session = None, None
         try:
-            ctx = tls_context(config)
-            reader, writer = await asyncio.wait_for(asyncio.open_connection(
-                config["host"],config["port"],ssl=ctx,
-                server_hostname=config.get("server_name","localhost") if ctx else None), 10)
-            await send(writer, control("HELLO", {"schema": 2, "role": "gateway",'follow_scope':True}))
-            snapshot, session = await receive_snapshot(reader)
-            await confirm_snapshot(reader,writer,snapshot,session)
-            gateway.start_session(plant, session)
-            await await_catalog_members(gateway,[item['market'] for item in snapshot['items']])
-            await gateway.snapshot_async(plant,session,snapshot)
-            del snapshot  # A live session must not pin its initial wire ladders.
+            if not hasattr(gateway,'bootstrap_slots'):gateway.bootstrap_slots=asyncio.Semaphore(1)
+            async with gateway.bootstrap_slots:
+                ctx = tls_context(config)
+                reader, writer = await asyncio.wait_for(asyncio.open_connection(
+                    config["host"],config["port"],ssl=ctx,
+                    server_hostname=config.get("server_name","localhost") if ctx else None), 10)
+                await send(writer, control("HELLO", {"schema": 2, "role": "gateway",'follow_scope':True}))
+                snapshot, session = await receive_snapshot(reader)
+                await confirm_snapshot(reader,writer,snapshot,session)
+                gateway.start_session(plant, session)
+                await await_catalog_members(gateway,[item['market'] for item in snapshot['items']])
+                await gateway.snapshot_async(plant,session,snapshot)
+                del snapshot  # A live session must not pin its initial wire ladders.
             batch_records=0
             while not stop.is_set():
                 rec = decode(await asyncio.wait_for(read_frame(reader), 30))
