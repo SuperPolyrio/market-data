@@ -418,3 +418,24 @@ def test_bootstrap_exact_decode_and_bounded_initialization_preserve_full_books(t
         assert journal.max_sync_batch>1
         assert all(state_view(book)==assets for book in gateway.committed.values())
     asyncio.run(run())
+
+
+def test_archive_process_readback_and_dependency_guard(tmp_path):
+    import json
+    from lobv2.archive import DirectoryStore,restore,read_archive
+    from lobv2.archive_worker import run_isolated
+    async def run():
+        root=tmp_path/'node';journal=Journal(root/'journal','P','capture')
+        original=journal.append('RAW',{'connection':'c','recv_seq':1},b'  {"unknown":true}\n').frame
+        await journal.close();path=next((root/'journal').glob('*.journal'))
+        config={'store_uri':str(tmp_path/'remote'),'evict_after_commit':True}
+        store=DirectoryStore(tmp_path/'remote')
+        with pytest.raises(OSError,match='ACTIVE_LOCAL_DEPENDENCIES'):
+            await asyncio.to_thread(run_isolated,root,path,config,None,store)
+        assert path.exists()
+        result=await asyncio.to_thread(run_isolated,root,path,config,{'stream':journal.stream,'applied_offset':journal.offset},store)
+        assert result['pid']!=os.getpid() and not path.exists()
+        receipt=json.loads(path.with_suffix('.archive.json').read_bytes())
+        restored=tmp_path/'recovered.lobseg';restore(store,receipt['manifest_key'],restored)
+        assert [r.frame for r in read_archive(restored)]==[original]
+    asyncio.run(run())

@@ -519,54 +519,14 @@ async def archive_loop(root, config, stop, owner=None):
             receipt = path.with_suffix(".archive.json")
             if receipt.exists() and (not config.get("evict_after_commit") or json.loads(receipt.read_bytes()).get("eviction")):
                 continue
-            def archive_one():
-                packed = path.with_suffix(".lobseg")
-                def stage(name):
-                    atomic_json(root/'archive-phase.json',{'utc_ns':time.time_ns(),'path':str(path),'stage':name,
-                        'input_bytes':path.stat().st_size if path.exists() else 0,
-                        'packed_bytes':packed.stat().st_size if packed.exists() else 0})
-                if receipt.exists():
-                    saved = json.loads(receipt.read_bytes())
-                    key,manifest = saved["manifest_key"],saved["manifest"]
-                else:
-                    try:
-                        stage('COMPRESS')
-                        build_archive(path,packed)
-                    except ValueError as exc:
-                        if str(exc) != "EMPTY_JOURNAL":
-                            raise
-                        # Preserve a legacy header-only segment separately. It has
-                        # no observations or offsets and cannot block later custody.
-                        os.rename(path,path.with_suffix(".empty"))
-                        from .journal import sync_dir
-                        sync_dir(path.parent)
-                        return
-                    key,manifest = commit_archive(store,packed,"capture" if path.name.startswith("capture") else "tape",on_stage=stage)
-                    saved = {"manifest_key":key,"manifest":manifest,"committed_utc_ns":time.time_ns(),
-                        "local_journal_bytes":path.stat().st_size}
-                    atomic_json(receipt,saved)
-                if config.get("evict_after_commit"):
-                    # This process owns the private journal directory under writer.lock.
-                    # Replay consumers use immutable objects. All live subscriptions and
-                    # callbacks own encoded frames in memory, never sealed file readers.
-                    dependencies = []
-                    lifecycle_cut=manifest.get('lifecycle_last_cut',0)
-                    if lifecycle_cut:
-                        life=root/'lifecycle'/(manifest['stream']+'.progress.json')
-                        if not life.exists() or json.loads(life.read_bytes()).get('canonical_notification_cut',0)<lifecycle_cut:
-                            dependencies.append('LIFECYCLE_OUTBOX_NOT_RECOVERABLE')
-                    if owner is None or (manifest["stream"] == owner.journal.stream and manifest["last"] > owner.journal.applied_offset):
-                        dependencies.append("DURABLE_CALLBACK_CUT_NOT_RELEASED")
-                    saved["eviction"] = evict(path,packed,store,key,active_dependencies=dependencies)
-                    saved["eviction"]["dependency_evidence"] = "EXCLUSIVE_WRITER_PRIVATE_DIRECTORY_NO_FILE_REPLAY_READERS"
-                    atomic_json(receipt,saved)
-                    stage('LOCAL_CACHE_RELEASED')
             try:
                 def budgeted_archive():
                     from .ssh_store import archive_slot
                     atomic_json(root/'archive-phase.json',{'utc_ns':time.time_ns(),'path':str(path),'stage':'WAIT_BACKGROUND_BUDGET'})
                     with archive_slot(config,store):
-                        return archive_one()
+                        from .archive_worker import run_isolated
+                        cut={"stream":owner.journal.stream,"applied_offset":owner.journal.applied_offset} if owner else None
+                        return run_isolated(root,path,config,cut,store)
                 future = asyncio.get_running_loop().run_in_executor(executor,budgeted_archive)
                 try:
                     await asyncio.shield(future)
@@ -580,7 +540,13 @@ async def archive_loop(root, config, stop, owner=None):
                     "action":"LOCAL_JOURNAL_RETAINED_RETRY_PENDING"})
                 break
         def write_archive_progress():
-            receipts = [json.loads(p.read_bytes()) for p in (root/"journal").glob("*.archive.json")]
+            receipts = []
+            for p in (root/"journal").glob("*.archive.json"):
+                row=json.loads(p.read_bytes())
+                receipts.append({'manifest':{k:row['manifest'][k] for k in ('stream','first','last','object_bytes')},
+                    'local_journal_bytes':row.get('local_journal_bytes',0),
+                    'eviction':{'released_bytes':row.get('eviction',{}).get('released_bytes',0)}})
+                del row
             streams = {}
             for row in receipts:
                 streams.setdefault(row["manifest"]["stream"],[]).append(row["manifest"])
