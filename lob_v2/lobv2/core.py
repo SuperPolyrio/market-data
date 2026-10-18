@@ -577,7 +577,11 @@ class Plant(Owner):
                 kind = normalized["kind"]
                 if kind == "SNAPSHOT":
                     token = event["asset_id"]
-                    self.states[(shard,lane,token)].update(book_seen=True,
+                    # A replacement native book has its own capture receipt.
+                    # Do not associate the previous baseline's durable flag or
+                    # receipt with the new working snapshot before its RAW cut.
+                    self.transition((shard,lane,token), book_seen=True, ready=False,
+                        baseline_durable=False, baseline_capture_durable_ref=None,
                         book_seen_ns=raw_rec.created_ns, baseline_offset=raw_rec.offset,
                         baseline_ref=ref, baseline_session=connection, status="BASELINE_PENDING_DURABLE")
                     heapq.heappush(self.baseline_pending,(raw_rec.offset, (shard,lane,token),raw_rec))

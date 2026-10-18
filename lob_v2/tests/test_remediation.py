@@ -286,6 +286,37 @@ def test_durable_raw_before_async_book_parse_still_releases_baselines(tmp_path):
     asyncio.run(run())
 
 
+def test_replacement_native_book_cannot_reuse_previous_durability_receipt(tmp_path):
+    from test_semantics import make_plant, initialize, feed, FIXTURE
+    async def run():
+        p=make_plant(tmp_path)
+        initialize(p)
+        await p.journal.sync()
+        old_cut=p.journal.durable_offset
+        before=state_view(p.committed['m'])
+        state=p.states[(0,0,'1')]
+        old_receipt=state['baseline_capture_durable_ref'].copy()
+        assert state['ready'] and state['baseline_durable']
+        replacement=deepcopy(FIXTURE[0])
+        replacement['bids'][0]['size']='456'
+        rec=feed(p,replacement,seq=3)
+        assert rec.offset>old_cut
+        assert not state['ready'] and not state['baseline_durable']
+        assert state['baseline_capture_durable_ref'] is None
+        assert state['baseline_ref']['capture_offset']==rec.offset
+        assert state_view(p.committed['m'])==before
+        # The pending snapshot can follow its RAW in the same group sync; the
+        # already selected source need not emit an artificial GAP or RESET.
+        assert p.selected['m']==('m',0,0)
+        await p.journal.sync()
+        assert state['ready'] and state['baseline_durable']
+        assert state['baseline_capture_durable_ref']['record_sequence']==rec.offset
+        assert state['baseline_capture_durable_ref']!=old_receipt
+        assert state_view(p.committed['m'])['1']['bids']==[['0.5','456']]
+        await p.journal.close()
+    asyncio.run(run())
+
+
 def test_lifecycle_outbox_has_original_durable_capture_identity(tmp_path):
     import json
     from test_semantics import make_plant
