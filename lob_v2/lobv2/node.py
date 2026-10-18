@@ -19,7 +19,7 @@ from collections import deque
 
 import websockets
 
-from .book import digest, inspect, state_view
+from .book import digest, inspect, state_view, prepare_record
 from .catalog import shards, validate_scope
 from .core import Gateway, Plant
 from .journal import Journal, atomic_json, read_journal, recover_open, repair_lifecycle_outboxes
@@ -119,7 +119,7 @@ async def confirm_snapshot(reader,writer,snapshot,session):
         raise ValueError("BOOTSTRAP_CANCELLED")
 
 
-async def decode_snapshot(data):
+async def decode_snapshot(data, *, exact_books=False):
     """Yield only between complete markets while decoding a large bootstrap."""
     text=data.decode();decoder=json.JSONDecoder();size=len(text);index=0;result={}
     def whitespace(position):
@@ -140,6 +140,8 @@ async def decode_snapshot(data):
             while index<size and text[index]!=']':
                 item,index=decoder.raw_decode(text,index)
                 if not isinstance(item,dict):raise ValueError('INVALID_SNAPSHOT_MARKET')
+                if exact_books:
+                    item['assets']=prepare_record({'kind':'SOURCE_RESET','scope':'MARKET','assets':item['assets']})
                 items.append(item);index=whitespace(index)
                 if time.monotonic_ns()-started>=2_000_000:
                     await asyncio.sleep(0);started=time.monotonic_ns()
@@ -159,7 +161,7 @@ async def decode_snapshot(data):
     return result
 
 
-async def receive_snapshot(reader):
+async def receive_snapshot(reader, *, exact_books=False):
     begin = decode(await asyncio.wait_for(read_frame(reader), 30))
     header = begin.body
     if begin.kind != "BOOTSTRAP_BEGIN" or not 0 < header["bytes"] <= 64*1024*1024 or not 0 < header["chunks"] <= 256:
@@ -175,7 +177,7 @@ async def receive_snapshot(reader):
     end = decode(await asyncio.wait_for(read_frame(reader), 30))
     if end.kind != "BOOTSTRAP_END" or end.body != header or len(data) != header["bytes"] or hashlib.sha256(data).hexdigest() != header["sha256"]:
         raise ValueError("BOOTSTRAP_DIGEST")
-    snapshot = await decode_snapshot(data)
+    snapshot = await decode_snapshot(data,exact_books=exact_books)
     if snapshot["snapshot_id"] != header["snapshot_id"]:
         raise ValueError("SNAPSHOT_ID_MISMATCH")
     return snapshot, header["session"]
@@ -349,7 +351,7 @@ async def plant_session(gateway, plant, config, stop):
                     config["host"],config["port"],ssl=ctx,
                     server_hostname=config.get("server_name","localhost") if ctx else None), 10)
                 await send(writer, control("HELLO", {"schema": 2, "role": "gateway",'follow_scope':True}))
-                snapshot, session = await receive_snapshot(reader)
+                snapshot, session = await receive_snapshot(reader,exact_books=True)
                 await confirm_snapshot(reader,writer,snapshot,session)
                 gateway.start_session(plant, session)
                 await await_catalog_members(gateway,[item['market'] for item in snapshot['items']])

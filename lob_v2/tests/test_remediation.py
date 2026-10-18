@@ -393,3 +393,28 @@ def test_independent_replay_accounts_for_assigned_unsent_candidate_books(tmp_pat
         assert all(not s['written'] and not s['ready'] for s in plant.states.values())
         assert not any(r.kind in ('RAW','PLANT_EMIT','SUBSCRIPTION_WRITE_OK') for r in records)
     asyncio.run(run())
+
+
+def test_bootstrap_exact_decode_and_bounded_initialization_preserve_full_books(tmp_path):
+    import json
+    from lobv2.node import decode_snapshot
+    from lobv2.core import Gateway
+    async def run():
+        assets=reset()['assets']
+        scope={'markets':[{'market':str(i),'assets':['1','2'],'version':'1','asset_id_kind':'CLOB_TOKEN_ID'} for i in range(300)]}
+        wire={'snapshot_id':'s','stream':'p','items':[{'market':str(i),'assets':assets,'cut':7,'route':{'plant':'P'}} for i in range(300)]}
+        decoded=await decode_snapshot(json.dumps(wire).encode(),exact_books=True)
+        assert all(state_view(item['assets'])==assets for item in decoded['items'])
+        journal=Journal(tmp_path,'G','tape');gateway=Gateway(journal,scope)
+        gateway.start_session('P','session')
+        stop=asyncio.Event();writer=asyncio.create_task(journal.run(stop,.002));maximum=0
+        async def monitor():
+            nonlocal maximum
+            while not stop.is_set():maximum=max(maximum,len(journal.pending));await asyncio.sleep(0)
+        watch=asyncio.create_task(monitor())
+        await asyncio.wait_for(gateway.snapshot_async('P','session',decoded),10)
+        await journal.sync();stop.set();await writer;await watch;await journal.close()
+        assert len(gateway.committed)==300 and maximum<=128
+        assert journal.max_sync_batch>1
+        assert all(state_view(book)==assets for book in gateway.committed.values())
+    asyncio.run(run())

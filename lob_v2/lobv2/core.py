@@ -7,7 +7,7 @@ import uuid
 import asyncio
 import heapq
 
-from .book import SourceBook, apply_state as apply, inspect, state_view, prepare_record, ChangeGroup, uncrossed, freeze_state, prepare_state_copy
+from .book import SourceBook, BookState, apply_state as apply, inspect, state_view, prepare_record, ChangeGroup, uncrossed, freeze_state, prepare_state_copy
 from .wire import ByteQueue
 
 POLICY = "single_healthy_route_catalog_admission_v2.2.1"
@@ -692,7 +692,7 @@ class Gateway(Owner):
             if market not in self.scope or set(item["assets"]) != set(self.scope[market]["assets"]):
                 raise ValueError("INCOMPLETE_MARKET_SNAPSHOT")
             ready = all(x["ready"] for x in item["assets"].values())
-            self.shadows[(plant,market)] = {"ready": ready, "assets": prepare_record({"kind":"SOURCE_RESET","scope":"MARKET","assets":item["assets"]}),
+            self.shadows[(plant,market)] = {"ready": ready, "assets": item['assets'] if isinstance(item['assets'],BookState) else prepare_record({"kind":"SOURCE_RESET","scope":"MARKET","assets":item["assets"]}),
                 "seq": item["cut"], "session": session, "snapshot_id": snapshot["snapshot_id"],
                 "quality": deepcopy(item.get("quality",{})),
                 "route": {**item["route"], "plant_session_id": session}}
@@ -703,6 +703,13 @@ class Gateway(Owner):
     async def snapshot_async(self,plant,session,snapshot):
         started=time.monotonic_ns()
         for item in snapshot["items"]:
+            waiting=time.monotonic_ns()
+            # Limit the initialization burst without waiting for each group to
+            # fsync. The regular journal writer still commits batches concurrently.
+            while len(self.journal.pending)>=128 or self.journal.pending_size>=1024*1024:
+                if self.journal.failure:raise OSError(self.journal.failure)
+                await asyncio.sleep(.001)
+            self.journal.metrics.observe('bootstrap_admission_wait',(time.monotonic_ns()-waiting)/1e6)
             self.snapshot(plant,session,{**snapshot,"items":[item]})
             if time.monotonic_ns()-started>2_000_000:
                 await asyncio.sleep(0)
