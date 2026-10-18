@@ -475,11 +475,16 @@ async def archive_loop(root, config, stop, owner=None):
                 continue
             def archive_one():
                 packed = path.with_suffix(".lobseg")
+                def stage(name):
+                    atomic_json(root/'archive-phase.json',{'utc_ns':time.time_ns(),'path':str(path),'stage':name,
+                        'input_bytes':path.stat().st_size if path.exists() else 0,
+                        'packed_bytes':packed.stat().st_size if packed.exists() else 0})
                 if receipt.exists():
                     saved = json.loads(receipt.read_bytes())
                     key,manifest = saved["manifest_key"],saved["manifest"]
                 else:
                     try:
+                        stage('COMPRESS')
                         build_archive(path,packed)
                     except ValueError as exc:
                         if str(exc) != "EMPTY_JOURNAL":
@@ -490,7 +495,7 @@ async def archive_loop(root, config, stop, owner=None):
                         from .journal import sync_dir
                         sync_dir(path.parent)
                         return
-                    key,manifest = commit_archive(store,packed,"capture" if path.name.startswith("capture") else "tape")
+                    key,manifest = commit_archive(store,packed,"capture" if path.name.startswith("capture") else "tape",on_stage=stage)
                     saved = {"manifest_key":key,"manifest":manifest,"committed_utc_ns":time.time_ns(),
                         "local_journal_bytes":path.stat().st_size}
                     atomic_json(receipt,saved)
@@ -509,9 +514,11 @@ async def archive_loop(root, config, stop, owner=None):
                     saved["eviction"] = evict(path,packed,store,key,active_dependencies=dependencies)
                     saved["eviction"]["dependency_evidence"] = "EXCLUSIVE_WRITER_PRIVATE_DIRECTORY_NO_FILE_REPLAY_READERS"
                     atomic_json(receipt,saved)
+                    stage('LOCAL_CACHE_RELEASED')
             try:
                 def budgeted_archive():
                     from .ssh_store import archive_slot
+                    atomic_json(root/'archive-phase.json',{'utc_ns':time.time_ns(),'path':str(path),'stage':'WAIT_BACKGROUND_BUDGET'})
                     with archive_slot(config,store):
                         return archive_one()
                 future = asyncio.get_running_loop().run_in_executor(executor,budgeted_archive)
@@ -545,6 +552,10 @@ async def archive_loop(root, config, stop, owner=None):
                 "evicted_bytes":sum(r.get("eviction",{}).get("released_bytes",0) for r in receipts),
                 "sealed_pending_bytes":sum(p.stat().st_size for p in unarchived),
                 "sealed_oldest_age_seconds":max((time.time()-p.stat().st_mtime for p in unarchived),default=0),
+                'open_tail_bytes':sum(p.stat().st_size for p in (root/'journal').glob('*.open')),
+                'sealed_uncompressed_bytes':sum(p.stat().st_size for p in unarchived if not p.with_suffix('.lobseg').exists()),
+                'compressed_pending_commit_bytes':sum(p.with_suffix('.lobseg').stat().st_size for p in unarchived if p.with_suffix('.lobseg').exists()),
+                'committed_waiting_local_release_bytes':sum(p.stat().st_size for p in (root/'journal').glob('*.journal') if p.with_suffix('.archive.json').exists()),
                 "streams":ranges})
         await asyncio.get_running_loop().run_in_executor(executor,write_archive_progress)
         try:

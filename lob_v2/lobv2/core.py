@@ -223,6 +223,7 @@ class Plant(Owner):
         self.books, self.connections, self.selected = {}, {}, {}
         self.market_keys = {}
         self.connection_epochs = {}
+        self.subscription_revisions={}
         self.raw_received = self.raw_bytes = self.parse_errors = 0
         self.states = {}
         self.history = deque(maxlen=65536)
@@ -313,6 +314,7 @@ class Plant(Owner):
     def connect(self, shard, lane, connection, epoch, markets):
         self.connections[(shard, lane)] = connection
         self.connection_epochs[(shard,lane)] = epoch
+        self.subscription_revisions[(shard,lane)]=0
         self.journal.append("CONNECT", {"shard": shard, "lane": lane, "connection": connection,
                                         "connection_epoch": epoch})
         self.assign(shard,lane,connection,epoch,markets)
@@ -338,10 +340,13 @@ class Plant(Owner):
     def written(self, shard, lane, connection, tokens, attempt):
         if self.connections.get((shard, lane)) != connection:
             return False
+        self.subscription_revisions[(shard,lane)]+=1
         rec = self.journal.append("SUBSCRIPTION_WRITE_OK", {"shard": shard, "lane": lane,
-            "connection": connection, "assets": tokens, "send_attempt_id": attempt})
+            "connection": connection, "assets": tokens, "send_attempt_id": attempt,
+            'catalog_revision':self.catalog_revision,'subscription_revision':self.subscription_revisions[(shard,lane)]})
         for token in tokens:
             self.states[(shard, lane, token)].update(written=True, write_succeeded_ns=rec.created_ns,
+                subscription_written_revision=self.subscription_revisions[(shard,lane)],
                 send_attempt_id=attempt, status="READY" if self.states[(shard,lane,token)]["ready"] else "SENT_WAIT_BOOK")
         return True
 
@@ -446,7 +451,11 @@ class Plant(Owner):
         started=time.monotonic_ns()
         for key in tuple(self.transport_keys.pop((shard,lane),())):
             if self.selected.get(key[0])==key:self.select(key[0],exclude=key,reason="SOURCE_SESSION_RETIRED")
-            for token in self.books[key].assets:self.states.pop((shard,lane,token),None)
+            self.journal.append('SOURCE_STATE_RELEASED',{'market':key[0],'shard':shard,'lane':lane,
+                'connection':self.connections.get((shard,lane))})
+            for token in self.books[key].assets:
+                self.transition((shard,lane,token),ready=False,status='SESSION_RETIRED')
+                self.states.pop((shard,lane,token),None)
             del self.books[key]
             self.market_keys[key[0]].discard(key)
             self.admitted_keys.discard(key)
@@ -457,6 +466,7 @@ class Plant(Owner):
                 started=time.monotonic_ns()
         self.connections.pop((shard,lane),None)
         self.connection_epochs.pop((shard,lane),None)
+        self.subscription_revisions.pop((shard,lane),None)
         self.transports.pop((shard,lane),None)
         self.ingress_queues.pop((shard,lane),None)
 
@@ -500,7 +510,8 @@ class Plant(Owner):
                 "connection_epoch": self.connection_epochs.get((shard,lane)) if self.connections.get((shard,lane))==connection else "STALE_UNKNOWN",
                 "recv_utc_ns": recv_utc_ns or time.time_ns(),
                 "recv_mono_ns": recv_mono_ns or time.monotonic_ns(),
-                "clock_quality": "LOCAL_WALL_UNVERIFIED", "subscription_revision": 1}
+                "clock_quality": "LOCAL_WALL_UNVERIFIED", "subscription_revision":self.subscription_revisions.get((shard,lane)),
+                'catalog_revision':self.catalog_revision}
         raw_rec = self.journal.append("RAW", meta, raw)
         timing = {"recv_return":meta["recv_mono_ns"],**(ingress or {}),"clock_id":self.provenance.get("clock_id")}
         raw_rec.trace.update({k:v for k,v in timing.items() if k!="clock_id"})
@@ -596,7 +607,7 @@ class Plant(Owner):
         if rec.kind=="SOURCE_ADMISSION":
             key=tuple(rec.body["key"])
             self.admission_pending.discard(key)
-            if self.connections.get(key[1:])==rec.body["connection"] and self.base_usable(key):
+            if key in self.books and self.connections.get(key[1:])==rec.body["connection"] and self.base_usable(key):
                 old=self.active_routes.get((key[0],key[2]))
                 self.admitted_keys.add(key)
                 self.active_routes[(key[0],key[2])]=key
@@ -610,8 +621,9 @@ class Plant(Owner):
     def release_baselines(self,cut):
         while self.baseline_pending and self.baseline_pending[0][0] <= cut:
             offset, key, raw_record = heapq.heappop(self.baseline_pending)
-            state = self.states[key]
-            if state.get("baseline_offset") != offset:
+            state = self.states.get(key)
+            if state is None or state.get("baseline_offset") != offset:
+                self.journal.metrics.counters['retired_baseline_receipt_ignored']+=1
                 continue
             current = self.connections.get(key[:2]) == state["connection"]
             book = self.books[(state["market"], key[0], key[1])].assets[state["token"]]

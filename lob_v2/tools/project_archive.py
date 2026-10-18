@@ -61,42 +61,59 @@ def project(settings,receipts,output):
             return result
 
 
-def watch(deployment,output):
+def watch(deployment,output,partition=0,partitions=1):
     settings=json.loads((deployment/'settings.json').read_bytes())
     db=sqlite3.connect(output/'jobs.sqlite');db.execute('PRAGMA journal_mode=WAL');db.execute('PRAGMA synchronous=FULL')
     db.execute('CREATE TABLE IF NOT EXISTS done(input_key TEXT PRIMARY KEY,receipt TEXT NOT NULL)')
     db.execute('CREATE TABLE IF NOT EXISTS ranges(input_key TEXT PRIMARY KEY,view TEXT,producer TEXT,stream TEXT,first INTEGER,last INTEGER)')
+    db.execute('CREATE TABLE IF NOT EXISTS queued(input_key TEXT PRIMARY KEY,first_seen_ns INTEGER)')
     def record(result,path):
         with db:
             for key,m in zip(result['input_keys'],result['input_manifests']):
                 db.execute('INSERT OR IGNORE INTO done VALUES (?,?)',(key,str(path)))
+                db.execute('DELETE FROM queued WHERE input_key=?',(key,))
                 db.execute('INSERT OR IGNORE INTO ranges VALUES (?,?,?,?,?,?)',(key,result['remote_query']['manifest']['view'],m['producer'],m['stream'],m['first'],m['last']))
     for path in (output/'receipts').glob('*.json'):record(json.loads(path.read_bytes()),path)
     last_progress=0
+    queued_path=output/'queue-start.json'
+    if not queued_path.exists():atomic_json(queued_path,{'utc_ns':time.time_ns()})
+    queued_ns=json.loads(queued_path.read_bytes())['utc_ns']
+    belongs=lambda key:int.from_bytes(hashlib.sha256(key.encode()).digest()[:8],'big')%partitions==partition
     while True:
         done={row[0] for row in db.execute('SELECT input_key FROM done')}
         pending=[]
         if settings['archive'].get('local_tier'):
             from archive_receiver import HOT,COLD,read
-            keys={str(p.relative_to(HOT)) for p in (HOT/'commits').rglob('*.json')}
             index=sqlite3.connect('file:'+str(HOT/'cold-progress.sqlite')+'?mode=ro',uri=True)
-            keys.update(row[0] for row in index.execute('SELECT key FROM commits'));index.close()
-            for key in keys-done:
-                m=json.loads(read(key));path=HOT/key
-                if not path.exists():path=COLD/key
-                pending.append((key,{'manifest_key':key,'manifest':m,'committed_utc_ns':path.stat().st_mtime_ns}))
+            indexed=set()
+            for key,size,first in index.execute('SELECT key,bytes,first_offset FROM commits'):
+                indexed.add(key)
+                if key not in done and belongs(key):
+                    pending.append((key,{'manifest_key':key,'manifest':{'object_bytes':size,'first':first},
+                        'committed_utc_ns':queued_ns,'lazy_manifest':True}))
+            index.close()
+            for path in (HOT/'commits').rglob('*.json'):
+                key=str(path.relative_to(HOT))
+                if key in done or key in indexed or not belongs(key):continue
+                m=json.loads(read(key))
+                pending.append((key,{'manifest_key':key,'manifest':{'object_bytes':m['object_bytes'],'first':m['first']},
+                    'committed_utc_ns':path.stat().st_mtime_ns,'lazy_manifest':True}))
         else:
             for path in Path(settings['data_root']).glob('*/journal/*.archive.json'):
                 row=json.loads(path.read_bytes())
-                if row['manifest_key'] not in done:pending.append((path,row))
+                if row['manifest_key'] not in done and belongs(row['manifest_key']):pending.append((path,row))
         pending.sort(key=lambda pair:(pair[1]['manifest']['first']!=1,pair[1].get('committed_utc_ns',0)))
+        with db:db.executemany('INSERT OR IGNORE INTO queued VALUES (?,?)',((row['manifest_key'],time.time_ns()) for _,row in pending))
+        oldest=db.execute('SELECT MIN(first_seen_ns) FROM queued').fetchone()[0]
         queue={'utc_ns':time.time_ns(),'pending_segments':len(pending),
             'pending_input_object_bytes':sum(r['manifest']['object_bytes'] for _,r in pending),
-            'oldest_pending_seconds':max(((time.time_ns()-r['committed_utc_ns'])/1e9 for _,r in pending),default=0),
-            'completed_segments':len(done),'scope':'ALL_COMMITTED_PRODUCTION_ARCHIVES'}
+            'oldest_pending_seconds':(time.time_ns()-oldest)/1e9 if oldest else 0,
+            'completed_segments':len(done),'scope':'ALL_COMMITTED_PRODUCTION_ARCHIVES',
+            'partition':partition,'partitions':partitions,'age_basis':'WORKER_QUEUE_FIRST_OBSERVED_FOR_HISTORICAL_INPUTS'}
         atomic_json(output/'queue.json',queue)
         for path,row in pending:
             try:
+                if row.pop('lazy_manifest',False):row['manifest']=json.loads(read(row['manifest_key']))
                 result=project(settings,[row],output)
                 receipt=output/'receipts'/(hashlib.sha256(json_bytes(result['input_keys'])).hexdigest()+'.json')
                 record(result,receipt)
@@ -114,6 +131,9 @@ def watch(deployment,output):
             except Exception as exc:
                 atomic_json(output/'error.json',{'utc_ns':time.time_ns(),'input':str(path),'error':repr(exc),'action':'INPUT_RETAINED_RETRY_PENDING'})
                 continue
+            finally:
+                if settings['archive'].get('local_tier'):
+                    row['manifest']={k:row['manifest'][k] for k in ('first','object_bytes')}
         time.sleep(10)
 
 
@@ -132,8 +152,10 @@ def update_progress(output):
 if __name__=='__main__':
     p=argparse.ArgumentParser();p.add_argument('--deployment',type=Path,required=True)
     p.add_argument('--output',type=Path,required=True);p.add_argument('--receipt',type=Path,action='append');p.add_argument('--watch',action='store_true')
+    p.add_argument('--partition',type=int,default=0);p.add_argument('--partitions',type=int,default=1)
     args=p.parse_args();args.output.mkdir(parents=True,exist_ok=True)
-    if args.watch:watch(args.deployment,args.output)
+    if not 0<=args.partition<args.partitions:p.error('invalid partition')
+    if args.watch:watch(args.deployment,args.output,args.partition,args.partitions)
     else:
         if not args.receipt:p.error('--receipt or --watch required')
         result=project(json.loads((args.deployment/'settings.json').read_bytes()),args.receipt,args.output)

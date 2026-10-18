@@ -326,3 +326,19 @@ def test_contended_connection_credit_does_not_block_reader_event_loop(tmp_path):
         await task
         assert ticks>=20
     asyncio.run(run());thread.join()
+
+
+def test_retired_source_pending_baseline_durability_cannot_crash_or_reinstall(tmp_path):
+    import json
+    from test_semantics import make_plant,FIXTURE
+    async def run():
+        p=make_plant(tmp_path);p.require_source_admission=True
+        for i,event in enumerate(FIXTURE[:2]):await p.ingest_async(0,0,'c0',i+1,json.dumps(event).encode())
+        assert p.baseline_pending
+        await p.forget_source(0,0)
+        await p.journal.sync()
+        assert not p.selected and not p.baseline_pending and not p.journal.failure
+        assert not any(key[1:]==(0,0) for key in p.books)
+        assert p.journal.metrics.counters['retired_baseline_receipt_ignored']==2
+        await p.journal.close()
+    asyncio.run(run())

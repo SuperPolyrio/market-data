@@ -8,7 +8,7 @@
   "group_fsync_ms": 20,
   "heartbeat_seconds": 10,
   "pong_timeout_seconds": 30,
-  "first_snapshot_timeout_seconds": 20,
+  "first_snapshot_timeout_seconds": 60,
   "outbound_proxy": "env",
   "listen": {
     "host": "127.0.0.1",

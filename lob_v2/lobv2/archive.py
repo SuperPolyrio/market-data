@@ -248,13 +248,17 @@ class S3Store:
             Bucket=self.bucket, Prefix=self.prefix+"/"+prefix) for row in page.get("Contents", []))
 
 
-def commit_archive(store, path, kind, *, fail_before_manifest=False):
+def commit_archive(store, path, kind, *, fail_before_manifest=False,on_stage=None):
+    def stage(value):
+        if on_stage:on_stage(value)
+    stage('VERIFY_LOCAL_OBJECT')
     metadata = verify_archive(path)
     data = Path(path).read_bytes()
     sha = hashlib.sha256(data).hexdigest()
     stem = f"{kind}/{metadata['producer']}/{metadata['stream']}/{metadata['first']:020d}-{metadata['last']:020d}"
     key, manifest_key = "objects/"+stem+".lobseg", "commits/"+stem+".json"
-    store.put(key, data)
+    stage('UPLOAD_OBJECT');store.put(key, data)
+    stage('VERIFY_REMOTE_OBJECT')
     if store.get(key) != data:
         raise ValueError("OBJECT_READBACK_MISMATCH")
     records=read_archive(path)
@@ -268,9 +272,11 @@ def commit_archive(store, path, kind, *, fail_before_manifest=False):
         **metadata}
     if fail_before_manifest:
         raise OSError("INJECTED_MANIFEST_FAILURE")
-    store.put(manifest_key, json_bytes(manifest))
+    stage('COMMIT_MANIFEST');store.put(manifest_key, json_bytes(manifest))
+    stage('VERIFY_MANIFEST')
     if json.loads(store.get(manifest_key)) != manifest:
         raise ValueError("COMMIT_READBACK_MISMATCH")
+    stage('COMMITTED')
     return manifest_key, manifest
 
 

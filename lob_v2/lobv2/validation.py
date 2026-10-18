@@ -44,6 +44,8 @@ def reference_sources(records, scope, cutoff):
             for key in list(states):
                 if key[1:] == slot:
                     del states[key]
+        elif rec.kind=='SOURCE_STATE_RELEASED':
+            states.pop((body['market'],body['shard'],body['lane']),None)
         elif rec.kind == "DISCONNECT":
             slot = (body["shard"],body["lane"])
             if active.get(slot) == body["connection"]:
@@ -374,15 +376,25 @@ async def live_acceptance(args):
             # SIGKILL one selected plant, then restart. This is not a power-loss test.
             selected_before = json.loads((root/"G/status.json").read_bytes()).get("selected",{})
             victim = Counter(selected_before.values()).most_common(1)[0][0] if selected_before else "P"
-            killed = time.monotonic_ns()
-            processes[victim].kill()
-            await processes[victim].wait()
-            logs[victim].close()
-            processes.pop(victim)
-            await wait_live(3)
-            await start_node(victim)
-            faults.append({"kind":"PLANT_SIGKILL_RESTART","plant":victim,"mono_ns":killed,
-                           "selected_before":selected_before})
+            backup='Q' if victim=='P' else 'P'
+            backup_status=json.loads((root/backup/'status.json').read_bytes())
+            affected={m for m,p in selected_before.items() if p==victim}
+            qualified={m for m,books in backup_status['books'].items() if len(books)==2 and all(b['ready'] and not b['crossed'] for b in books.values())}
+            if affected and affected<=qualified and time.time_ns()-backup_status['utc_ns']<5*10**9:
+                atomic_json(root/'backup-before-fault.json',backup_status)
+                killed = time.monotonic_ns()
+                processes[victim].kill()
+                await processes[victim].wait()
+                logs[victim].close()
+                processes.pop(victim)
+                await wait_live(3)
+                await start_node(victim)
+                faults.append({"kind":"PLANT_SIGKILL_RESTART","plant":victim,"mono_ns":killed,
+                               "selected_before":selected_before,'backup_verified_markets':sorted(affected)})
+            else:
+                faults.append({'kind':'PLANT_FAULT_NOT_RUN','reason':'BACKUP_NOT_QUALIFIED',
+                    'missing_markets':sorted(affected-qualified),'selected_markets':len(affected)})
+                await wait_live(3)
             await wait_live(args.seconds*.3)
             old = json.loads((root/"G/status.json").read_bytes())["stream"]
             processes["G"].kill()
