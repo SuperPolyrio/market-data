@@ -10,7 +10,7 @@ import heapq
 from .book import SourceBook, apply_state as apply, inspect, state_view, prepare_record, ChangeGroup, uncrossed, freeze_state
 from .wire import ByteQueue
 
-POLICY = "single_healthy_route_v2.0.1"
+POLICY = "single_healthy_route_catalog_admission_v2.2.0"
 
 
 async def decode_events(raw):
@@ -65,9 +65,13 @@ class Owner:
         self.emits = self.nonselected = self.resets = self.overflows = 0
         self.latencies_ms = deque(maxlen=65536)
         self.provenance = {}
+        self.catalog_revision=0
+        self.scope_policy_version=None
+        self.blocked_markets={}
         self.journal.callbacks.append(self.on_durable)
 
     def emit(self, market, event, route, *, reset=False):
+        if market in self.blocked_markets and event['kind']!='GAP':return None
         previous = self.seq.get(market, 0)
         if reset:
             self.epochs[market] = self.epochs.get(market, 0) + 1
@@ -80,7 +84,8 @@ class Owner:
         body = {**event, "market": market, "market_seq": previous+1,
                 "prev_market_seq": previous, "book_epoch": self.epochs.get(market, 0),
                 "route": deepcopy(route), "policy_version": POLICY,
-                "scope_revision": 1, "scope_assets": self.scope[market]["assets"],
+                "scope_revision": self.catalog_revision, "scope_policy_version":self.scope_policy_version,
+                "scope_assets": self.scope[market]["assets"],
                 "market_version": self.scope[market]["version"],
                 "asset_id_kind": self.scope[market]["asset_id_kind"],
                 "decision_created_ns": time.time_ns(), "decision_mono_ns": time.monotonic_ns(),
@@ -98,6 +103,38 @@ class Owner:
         self.seq[market] = previous+1
         self.emits += 1
         return rec
+
+    async def apply_catalog_control(self,control):
+        revision=control['catalog_revision']
+        if revision<self.catalog_revision:raise ValueError('CATALOG_REVISION_REGRESSION')
+        blocked={m['market']:m for m in control['blocked'] if m['market'] in self.scope}
+        if revision==self.catalog_revision and blocked==self.blocked_markets:return
+        previous=self.blocked_markets
+        self.catalog_revision=revision
+        self.scope_policy_version=control['scope_policy_version']
+        self.blocked_markets=blocked
+        self.journal.append('CATALOG_APPLIED',control)
+        started=time.monotonic_ns()
+        for market in set(blocked)|set(previous):
+            if market in blocked:
+                self.selected.pop(market,None)
+                if market not in previous and market in self.working:
+                    self.emit(market,{'kind':'GAP','reason':blocked[market]['reason'],
+                        'catalog_evidence':blocked[market]},self.routes[market])
+                if market not in previous and isinstance(self,Plant):
+                    for key in self.market_keys.get(market,()):
+                        self.books[key].invalidate();self.admitted_keys.discard(key)
+                        for token in self.books[key].assets:
+                            self.states[(key[1],key[2],token)].update(baseline_durable=False,ready=False)
+                elif market not in previous and isinstance(self,Gateway):
+                    for plant in self.market_plants.get(market,()):
+                        self.shadows[(plant,market)]['ready']=False
+            elif isinstance(self,Plant):self.select(market,reason='CATALOG_REVALIDATED')
+            elif isinstance(self,Gateway):self.choose(market,reason='CATALOG_REVALIDATED')
+            if isinstance(self,Plant):
+                for key in self.market_keys.get(market,()):self.reconcile(key)
+            if time.monotonic_ns()-started>2_000_000:
+                await asyncio.sleep(0);started=time.monotonic_ns()
 
     def on_durable(self, rec):
         if rec.kind != self.record_kind:
@@ -225,7 +262,8 @@ class Plant(Owner):
             proof=self.transports.get((shard,lane),{})
             reasons=self.eligibility_reasons(key,token)
             self.transition((shard,lane,token),ready=ready,transport_healthy=bool(proof.get("healthy")),
-                pong_rtt_ms=proof.get("rtt_ms"),eligibility_reasons=reasons,
+                pong_rtt_ms=proof.get("rtt_ms"),pong_raw_ref=proof.get('raw_ref'),
+                desired_revision=self.catalog_revision,eligibility_reasons=reasons,
                 status="READY" if ready else reasons[0] if reasons else "WAIT_MARKET_ADMISSION")
         selected=self.selected.get(key[0])
         if selected==key and not usable:
@@ -311,13 +349,14 @@ class Plant(Owner):
 
     def base_usable(self,key):
         book=self.books[key]
-        return self.healthy_transport(key[1],key[2]) and book.ready and book.uncrossed and not self.local_issue(key[1],key[2])
+        return key[0] not in self.blocked_markets and self.healthy_transport(key[1],key[2]) and book.ready and book.uncrossed and not self.local_issue(key[1],key[2])
 
     def eligibility_reasons(self,key,token):
         market,shard,lane=key
         state=self.states[(shard,lane,token)]
         book=self.books[key]
         reasons=[]
+        if market in self.blocked_markets:reasons.append(self.blocked_markets[market]['reason'])
         if self.connections.get((shard,lane))!=state["connection"]:reasons.append("SESSION_MISMATCH")
         if not state["written"]:reasons.append("SUBSCRIPTION_NOT_WRITTEN")
         if not state["book_seen"] or not book.assets[token]["ready"]:reasons.append("WAIT_NATIVE_BASELINE")
@@ -587,7 +626,7 @@ class Gateway(Owner):
 
     def choose(self, market, reason="PLANT_SELECT"):
         candidates = [(p,self.shadows[(p,market)]) for p in sorted(self.market_plants.get(market,()))
-                      if (p,market) in self.shadows and self.shadows[(p,market)]["ready"]]
+                      if market not in self.blocked_markets and (p,market) in self.shadows and self.shadows[(p,market)]["ready"]]
         if not candidates:
             self.selected.pop(market, None)
             if market in self.working:

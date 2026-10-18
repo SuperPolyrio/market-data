@@ -40,6 +40,7 @@ def build_archive(journal, destination, block_bytes=1024*1024, max_bytes=ARCHIVE
     compressor = zstd.ZstdCompressor(level=3, write_checksum=True)
     index, buffer, records, stream_sha = [], bytearray(), [], hashlib.sha256()
     count = 0
+    lifecycle_last_cut=0
     def flush(out):
         nonlocal buffer, records
         if not records:
@@ -69,6 +70,7 @@ def build_archive(journal, destination, block_bytes=1024*1024, max_bytes=ARCHIVE
                 records.append(rec)
                 stream_sha.update(rec.frame)
                 count += 1
+                if rec.kind=='LIFECYCLE_CAPTURED':lifecycle_last_cut=rec.offset
                 if count == 1:
                     producer, stream = rec.producer, rec.stream
             flush(out)
@@ -76,6 +78,7 @@ def build_archive(journal, destination, block_bytes=1024*1024, max_bytes=ARCHIVE
                 raise ValueError("EMPTY_JOURNAL")
             footer = {"version": 2, "producer": producer, "stream": stream,
                 "schema_digest": SCHEMA_DIGEST, "count": count, "blocks": index,
+                "lifecycle_last_cut":lifecycle_last_cut,
                 "first": index[0]["first"], "last": index[-1]["last"],
                 "recordstream_sha256": stream_sha.hexdigest()}
             encoded = json_bytes(footer)

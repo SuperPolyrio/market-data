@@ -67,7 +67,11 @@ def read_journal(path, recover=False):
                 if len(payload) == length:
                     data = head + payload
                     unframe(data)
-                    yield decode(data)
+                    rec=decode(data)
+                    rec.trace['receipt']={'log_id':metadata['producer']+':'+metadata['kind'],
+                        'log_generation':metadata['stream'],'record_sequence':rec.offset,
+                        'segment':metadata.get('segment',path.stem.rsplit('-',1)[-1]),'end_offset':src.tell()}
+                    yield rec
                     continue
             if not recover:
                 raise ValueError("INCOMPLETE_TAIL")
@@ -113,8 +117,6 @@ class Journal:
         self.stage_samples = deque(maxlen=4096)
         self.admission_failure = None
         self.metrics = Metrics()
-        self.lifecycle_fd=None
-        self.lifecycle_sequence=0
         self._open()
 
     def _open(self, first_offset=None):
@@ -122,7 +124,7 @@ class Journal:
         self.path = self.root / f"{self.kind}-{self.stream}-{self.segment:06d}.open"
         self.fd = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
         header = json_bytes({"version": 2, "producer": self.producer, "stream": self.stream,
-                             "kind": self.kind, "first_offset": (self.pending[0].offset if self.pending else self.offset+1) if first_offset is None else first_offset,
+                             "kind": self.kind,"segment":self.segment, "first_offset": (self.pending[0].offset if self.pending else self.offset+1) if first_offset is None else first_offset,
                              "schema_digest": SCHEMA_DIGEST, "created_ns": time.time_ns()})
         self._write(HEADER.pack(MAGIC, len(header)) + header)
         os.fdatasync(self.fd)
@@ -196,27 +198,12 @@ class Journal:
         start = time.monotonic_ns()
         os.fdatasync(self.fd)
         end = time.monotonic_ns()
-        notifications=[(rec.prepared,rec.body['event'],rec.body['raw_ref']) for rec in records if rec.kind=='LIFECYCLE_CAPTURED']
+        notifications=[{'event':rec.body['event'],'raw_ref':rec.body['raw_ref'],
+            'capture_durable_receipt':rec.prepared.trace['receipt'],'canonical_notification_cut':rec.offset}
+            for rec in records if rec.kind=='LIFECYCLE_CAPTURED']
         if notifications:
-            self._write_lifecycle(notifications)
+            append_lifecycle(self.root.parent/'lifecycle',self.producer,self.stream,notifications)
         return start, end
-
-    def _write_lifecycle(self,notifications):
-        directory=self.root.parent/'lifecycle';directory.mkdir(exist_ok=True)
-        path=directory/(self.stream+'.frames')
-        if self.lifecycle_fd is None:self.lifecycle_fd=os.open(path,os.O_CREAT|os.O_EXCL|os.O_WRONLY,0o600)
-        for source,event,ref in notifications:
-            self.lifecycle_sequence+=1
-            rec=encode('CATALOG_LIFECYCLE',self.producer,self.stream,self.lifecycle_sequence,
-                {'event':event,'raw_ref':ref,'capture_durable_receipt':source.trace['receipt'],'durability':'LOCAL_DURABLE'})
-            view=memoryview(rec.frame)
-            while view:
-                wrote=os.write(self.lifecycle_fd,view)
-                if wrote<=0:raise OSError('LIFECYCLE_SHORT_WRITE')
-                view=view[wrote:]
-        os.fdatasync(self.lifecycle_fd)
-        atomic_json(directory/(self.stream+'.progress.json'),{'stream':self.stream,'producer':self.producer,
-            'path':str(path),'durable_bytes':os.lseek(self.lifecycle_fd,0,os.SEEK_CUR),'records':self.lifecycle_sequence})
 
     def _seal_file(self):
         os.fdatasync(self.fd)
@@ -327,8 +314,46 @@ class Journal:
                 os.rename(self.path,self.path.with_suffix(".empty"))
                 sync_dir(self.root)
         self.closed = True
-        if self.lifecycle_fd is not None:os.close(self.lifecycle_fd)
         self._io.shutdown(wait=True)
+
+
+def append_lifecycle(directory,producer,stream,notifications):
+    """Rebuildable outbox. Only its committed byte prefix is visible to readers."""
+    directory=Path(directory);directory.mkdir(exist_ok=True)
+    path=directory/(stream+'.frames');progress=directory/(stream+'.progress.json')
+    prior=json.loads(progress.read_bytes()) if progress.exists() else {'durable_bytes':0,'records':0,'canonical_notification_cut':0}
+    sequence=prior['records'];cut=prior.get('canonical_notification_cut',0)
+    with path.open('r+b' if path.exists() else 'w+b') as out:
+        if out.seek(0,2)<prior['durable_bytes']:raise ValueError('LIFECYCLE_COMMITTED_PREFIX_MISSING')
+        out.truncate(prior['durable_bytes']);out.seek(prior['durable_bytes'])
+        for body in notifications:
+            if body['canonical_notification_cut']<=cut:continue
+            sequence+=1
+            rec=encode('CATALOG_LIFECYCLE',producer,stream,sequence,{**body,'durability':'LOCAL_DURABLE'})
+            out.write(rec.frame);cut=body['canonical_notification_cut']
+        out.flush();os.fsync(out.fileno())
+        atomic_json(progress,{'stream':stream,'producer':producer,'path':str(path),
+            'durable_bytes':out.tell(),'records':sequence,'canonical_notification_cut':cut})
+
+
+def repair_lifecycle_outboxes(root):
+    """Recover canonical notifications after sync-before-outbox/process failure."""
+    directory=Path(root).parent/'lifecycle'
+    repaired=0
+    for path in sorted(Path(root).glob('capture-*.journal')):
+        stream=path.stem[len('capture-'):].rsplit('-',1)[0]
+        progress=directory/(stream+'.progress.json')
+        cut=json.loads(progress.read_bytes()).get('canonical_notification_cut',0) if progress.exists() else 0
+        pending=[]
+        for rec in read_journal(path):
+            if rec.kind=='LIFECYCLE_CAPTURED' and rec.offset>cut:
+                pending.append({'event':rec.body['event'],'raw_ref':rec.body['raw_ref'],
+                    'ordered_capture_prefix_receipt':rec.trace['receipt'],'canonical_notification_cut':rec.offset})
+                if len(pending)>=128:
+                    append_lifecycle(directory,rec.producer,stream,pending);repaired+=len(pending);pending=[]
+        if pending:
+            append_lifecycle(directory,rec.producer,stream,pending);repaired+=len(pending)
+    return repaired
 
 
 def recover_open(root):

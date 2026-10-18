@@ -45,6 +45,7 @@ class Session:
         self.ever_admitted=False
         self.last_baseline=self.started
         self.baseline_frame_bytes=0
+        self.scope_unsubscribed=set()
 
     def admitted(self):
         return {m["market"] for m in self.markets if self.plant.active_routes.get((m["market"],self.lane))==(m["market"],self.shard,self.lane)
@@ -165,16 +166,18 @@ class Session:
         finally:
             self.closing=True
             self.reader_done.set()
-            if workers:
-                workers[0].cancel()
-                workers[2].cancel()
-                await asyncio.gather(workers[0],workers[2],return_exceptions=True)
-                # Accepted observations drain FIFO even on cancellation/overflow.
-                await workers[1]
-            if (self.shard,self.lane) in plant.connections:
-                plant.disconnect(self.shard,self.lane,self.connection,self.failure or "TRANSPORT_DEAD")
-            self.lease.release()
-            self.phase="CLOSED"
+            try:
+                if workers:
+                    workers[0].cancel()
+                    workers[2].cancel()
+                    await asyncio.gather(workers[0],workers[2],return_exceptions=True)
+                    # Accepted observations drain FIFO even on cancellation/overflow.
+                    await workers[1]
+            finally:
+                if (self.shard,self.lane) in plant.connections:
+                    plant.disconnect(self.shard,self.lane,self.connection,self.failure or "TRANSPORT_DEAD")
+                self.lease.release()
+                self.phase="CLOSED"
 
 
 async def session_manager(plant,logical,lane,markets,config,stop):
@@ -197,6 +200,16 @@ async def session_manager(plant,logical,lane,markets,config,stop):
                     sessions.remove(session)
                     await plant.forget_source(session.shard,lane)
                     continue
+                blocked={m['market'] for m in session.markets if m['market'] in plant.blocked_markets}
+                newly_blocked=blocked-session.scope_unsubscribed
+                if newly_blocked and session.ws is not None and not session.closing:
+                    tokens=[t for m in session.markets if m['market'] in newly_blocked for t in m['assets']]
+                    await session.ws.send(json_bytes({'operation':'unsubscribe','assets_ids':tokens}).decode())
+                    session.scope_unsubscribed.update(newly_blocked)
+                    session.pending-=blocked
+                    plant.journal.append('SCOPE_UNSUBSCRIBE',{'connection':session.connection,'markets':sorted(newly_blocked),
+                        'catalog_revision':plant.catalog_revision})
+                    if len(blocked)==len(session.markets):await session.close('CATALOG_SCOPE_RETIRED')
                 admitted=session.admitted()
                 if admitted:session.ever_admitted=True
                 phase="ACTIVE_WITH_PENDING_INITIALIZATION" if admitted and session.pending else "ACTIVE" if admitted else "RETIRING_CAPTURE" if session.ever_admitted else "CANDIDATE_INITIALIZING"
@@ -223,7 +236,7 @@ async def session_manager(plant,logical,lane,markets,config,stop):
                         session.probe.ambiguous or session.baseline_frame_bytes>config.get("max_snapshot_bytes_per_session",64*1024*1024)):
                     await session.close("UNKNOWN_INGRESS_LAG" if session.probe.ambiguous else "INITIALIZATION_BYTES_EXCEEDED")
             qualified={m["market"] for m in markets if any(plant.usable(k) for k in plant.market_keys.get(m["market"],()) if k[2]==lane)}
-            missing=[m for m in markets if m["market"] not in qualified]
+            missing=[m for m in markets if m["market"] not in qualified and m['market'] not in plant.blocked_markets]
             initializing=any(s.phase=="CANDIDATE_INITIALIZING" for s in sessions)
             local=next((plant.local_issue(s.shard,lane) for s in sessions if plant.local_issue(s.shard,lane)),None)
             grace=not sessions or min(now-s.started for s in sessions)>config.get("backlog_reconnect_grace_seconds",60)

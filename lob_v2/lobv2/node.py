@@ -13,6 +13,7 @@ import time
 import uuid
 import resource
 import platform
+import gc
 from concurrent.futures import ThreadPoolExecutor
 from collections import deque
 
@@ -21,7 +22,7 @@ import websockets
 from .book import digest, inspect, state_view
 from .catalog import shards, validate_scope
 from .core import Gateway, Plant
-from .journal import Journal, atomic_json, read_journal, recover_open
+from .journal import Journal, atomic_json, read_journal, recover_open, repair_lifecycle_outboxes
 from .wire import MAX_RECORD, SCHEMA_DIGEST, control, decode, encode, json_bytes, read_frame, send
 from . import __version__
 from .telemetry import queue_snapshot
@@ -233,6 +234,24 @@ async def qualification_loop(plant,stop):
                     started=time.monotonic_ns()
 
 
+async def catalog_control_loop(owner,config,stop):
+    path=Path(config['catalog_control_file']);head=Path(config['catalog_head_file'])
+    stamp=None
+    while not stop.is_set():
+        def read():
+            if not path.exists() or not head.exists():return None
+            mtime=path.stat().st_mtime_ns
+            if mtime==stamp:return None
+            control=json.loads(path.read_bytes());commit=json.loads(head.read_bytes())
+            if control['catalog_revision']>commit['catalog_revision']:return None
+            return mtime,control
+        update=await asyncio.to_thread(read)
+        if update:
+            await owner.apply_catalog_control(update[1]);stamp=update[0]
+        try:await asyncio.wait_for(stop.wait(),1)
+        except asyncio.TimeoutError:pass
+
+
 async def plant_session(gateway, plant, config, stop):
     while not stop.is_set():
         writer, session = None, None
@@ -289,6 +308,8 @@ async def plant_session(gateway, plant, config, stop):
 def status(owner):
     usage = resource.getrusage(resource.RUSAGE_SELF)
     result = {"producer": owner.journal.producer, "stream": owner.journal.stream,
+        "catalog_revision":owner.catalog_revision,"scope_policy_version":owner.scope_policy_version,
+        "blocked_markets":dict(owner.blocked_markets),"provenance":owner.provenance,
         "utc_ns": time.time_ns(), "mono_ns": time.monotonic_ns(),
         "journal_offset": owner.journal.offset, "durable_offset": owner.journal.durable_offset,
         "written_offset":owner.journal.written_offset,"applied_offset":owner.journal.applied_offset,
@@ -311,6 +332,8 @@ def status(owner):
         "cpu_user_seconds":usage.ru_utime,"cpu_system_seconds":usage.ru_stime}
     if isinstance(owner, Plant):
         result.update(raw_received=owner.raw_received, raw_bytes=owner.raw_bytes, parse_errors=owner.parse_errors,
+            active_source_routes=[{'market':market,'lane':lane,'shard':key[1],
+                'connection':owner.connections.get((key[1],lane))} for (market,lane),key in owner.active_routes.items()],
             token_states=[dict(s) for s in owner.states.values()], coverage_transitions=list(owner.history) if owner.runtime_config.get("metrics_history",True) else [],
             ingress_queues={str(k):queue_snapshot(q) for k,q in owner.ingress_queues.items()},event_loop_lag_ms=owner.loop_lag_ms,
             coverage_start_mono_ns=owner.start_mono_ns,
@@ -334,7 +357,8 @@ def quantiles(values):
 
 def summarize_status(snapshot):
     result = {key:snapshot.get(key,0) for key in ("utc_ns","producer","stream","raw_received","raw_bytes",
-        "pending_bytes","emits","parse_errors","local_spool_bytes","durable_offset","journal_offset")}
+        "pending_bytes","emits","parse_errors","local_spool_bytes","durable_offset","journal_offset",
+        "catalog_revision","scope_policy_version","provenance")}
     states = snapshot.get("token_states",[])
     for output,key in (("written_observations","written"),("book_seen_observations","book_seen"),
             ("durable_baseline_observations","baseline_durable"),("ready_observations","ready")):
@@ -354,6 +378,7 @@ async def metrics_loop(owner, root, stop):
     import orjson
     while not stop.is_set():
         config = owner.runtime_config
+        measured=time.monotonic_ns()
         spool = 0
         for path in (root/"journal").iterdir():
             try:
@@ -364,6 +389,7 @@ async def metrics_loop(owner, root, stop):
         if spool > config.get("spool_max_bytes",4*1024**3) or stat.f_bavail*stat.f_frsize < config.get("minimum_free_bytes",2*1024**3):
             raise OSError("SPOOL_BUDGET_OR_FREE_SPACE_EXHAUSTED")
         snapshot = status(owner)
+        owner.journal.metrics.observe('metrics_collection',(time.monotonic_ns()-measured)/1e6)
         snapshot["local_spool_bytes"] = spool
         summary=summarize_status(snapshot)
         def write_metrics():
@@ -426,6 +452,11 @@ async def archive_loop(root, config, stop, owner=None):
                     # Replay consumers use immutable objects. All live subscriptions and
                     # callbacks own encoded frames in memory, never sealed file readers.
                     dependencies = []
+                    lifecycle_cut=manifest.get('lifecycle_last_cut',0)
+                    if lifecycle_cut:
+                        life=root/'lifecycle'/(manifest['stream']+'.progress.json')
+                        if not life.exists() or json.loads(life.read_bytes()).get('canonical_notification_cut',0)<lifecycle_cut:
+                            dependencies.append('LIFECYCLE_OUTBOX_NOT_RECOVERABLE')
                     if owner is None or (manifest["stream"] == owner.journal.stream and manifest["last"] > owner.journal.applied_offset):
                         dependencies.append("DURABLE_CALLBACK_CUT_NOT_RELEASED")
                     saved["eviction"] = evict(path,packed,store,key,active_dependencies=dependencies)
@@ -484,6 +515,7 @@ async def run_node(role, node_id, config, scope, root, seconds=None):
     lock = (root/"writer.lock").open("a")
     fcntl.flock(lock.fileno(),fcntl.LOCK_EX|fcntl.LOCK_NB)
     recovered = recover_open(root/"journal")
+    if role=='plant':await asyncio.to_thread(repair_lifecycle_outboxes,root/'journal')
     journal = Journal(root/"journal",node_id,"capture" if role == "plant" else "tape",
         segment_bytes=config["segment_bytes"], segment_seconds=config["segment_seconds"],
         pending_bytes=config["queue_bytes"])
@@ -507,6 +539,13 @@ async def run_node(role, node_id, config, scope, root, seconds=None):
         journal.append("STREAM_RESTART", {"previous_recoverable_tapes":previous,
             "continuity": "RESET_REQUIRED", "client_received_position": "UNKNOWN"})
     owner.runtime_config = config
+    gc_started={}
+    def gc_timing(phase,info):
+        generation=info['generation']
+        if phase=='start':gc_started[generation]=time.monotonic_ns()
+        elif generation in gc_started:
+            journal.metrics.observe('gc_pause_generation_'+str(generation),(time.monotonic_ns()-gc_started.pop(generation))/1e6)
+    gc.callbacks.append(gc_timing)
     package_root=Path(__file__).parents[1]
     source_sha={p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted((package_root/"lobv2").glob("*.py"))}
     owner.provenance={"code_version":__version__,"source_sha256":hashlib.sha256(json_bytes(source_sha)).hexdigest(),
@@ -530,6 +569,8 @@ async def run_node(role, node_id, config, scope, root, seconds=None):
              asyncio.create_task(metrics_loop(owner,root,stop))]
     if config.get("archive",{}).get("store_uri") or config.get("archive",{}).get("ssh_store"):
         tasks.append(asyncio.create_task(archive_loop(root,config["archive"],stop,owner)))
+    if config.get('catalog_control_file'):
+        tasks.append(asyncio.create_task(catalog_control_loop(owner,config,stop)))
     if role == "plant":
         tasks.append(asyncio.create_task(qualification_loop(owner,stop)))
         for shard, markets in enumerate(shards(scope,config["assets_per_connection"])):
@@ -556,5 +597,6 @@ async def run_node(role, node_id, config, scope, root, seconds=None):
             if task:
                 task.cancel()
         await journal.close()
+        gc.callbacks.remove(gc_timing)
         atomic_json(root/"final.json",status(owner))
         lock.close()

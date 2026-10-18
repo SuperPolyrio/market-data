@@ -69,7 +69,7 @@ def shards(scope, capacity):
     return result
 
 
-async def discover(limit=None, *, slugs=(), pages=None, events=False, progress_path=None):
+async def discover(limit=None, *, slugs=(), pages=None, events=False, progress_path=None, budget=None):
     """Exhaust keyset pagination unless an explicit sample budget was requested."""
     started = time.time_ns()
     found, unresolved, excluded, cursor, seen = {}, [], [], None, set()
@@ -77,7 +77,7 @@ async def discover(limit=None, *, slugs=(), pages=None, events=False, progress_p
     def consume(rows):
         for row in rows:
             if row.get("closed") or row.get("enableOrderBook") is False:
-                excluded.append({"id":row.get("id"),"reason":"CLOSED_OR_NO_ORDERBOOK"})
+                excluded.append({"id":row.get("id"),"reason":"CLOSED_OR_NO_ORDERBOOK","closed":row.get("closed"),"enableOrderBook":row.get("enableOrderBook")})
                 continue
             try:
                 parsed = identity(row)
@@ -87,6 +87,7 @@ async def discover(limit=None, *, slugs=(), pages=None, events=False, progress_p
     async with httpx.AsyncClient(timeout=45) as client:
         if slugs:
             for slug in slugs:
+                if budget:await budget.wait()
                 response = await client.get(GAMMA+"/markets",params={"slug":slug})
                 response.raise_for_status()
                 consume(response.json())
@@ -97,6 +98,7 @@ async def discover(limit=None, *, slugs=(), pages=None, events=False, progress_p
                     params["after_cursor"] = cursor
                 for attempt in range(5):
                     try:
+                        if budget:await budget.wait()
                         response = await client.get(GAMMA+("/events/keyset" if events else "/markets/keyset"),params=params)
                         response.raise_for_status()
                         break

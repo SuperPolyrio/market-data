@@ -36,8 +36,33 @@ def enroll_locked(root, scope):
     settings = load(root/"settings.json")
     manifest_path = root/"deployment.json"
     manifest = load(manifest_path) if manifest_path.exists() else {"cohorts":[],"ownership":{},"conflicts":[]}
+    from lobv2.catalog_owner import CatalogOwner
+    owner=CatalogOwner(root)
+    # Migrate known, still-unresolved ownership without erasing members merely
+    # because a newer partial/full scan did not return them.
+    if not owner.metadata('ownership_seeded',False):
+        with owner.db:
+            owner.db.execute('BEGIN IMMEDIATE')
+            for path in sorted((root/'scopes').glob('*.json')):
+                for row in load(path)['markets']:owner.upsert(row,{'source':'EXISTING_OWNERSHIP_MIGRATION','path':str(path)})
+            owner.set_metadata('ownership_seeded',True)
+            if (root/'universe.json').exists():
+                old_scope=load(root/'universe.json')
+                if old_scope.get('full_universe_sweep'):
+                    owner.set_metadata('census_members',[m['market'] for m in old_scope['markets']])
+                    owner.set_metadata('last_complete_scan',{'source':old_scope.get('discovery_source'),
+                        'scan_id':old_scope['catalog_revision'],'observed_at':old_scope['sweep_end_ns'],'complete':True})
+    input_scope=scope
+    scope=owner.apply_scan(scope)
+    atomic_json(root/'catalog-snapshot.json',scope)
+    blocked={row['market'] for row in scope['unadmitted_groups']}
+    terminal={row['market'] for row in scope['terminal_evidence']+scope['scope_exclusions']}
+    atomic_json(root/'route-exclusions.json',{'catalog_revision':scope['catalog_revision'],'scope_policy_version':scope['scope_policy_version'],
+        'terminal':scope['terminal_evidence']+scope['scope_exclusions'],'quarantined':scope['unadmitted_groups']})
+    owner.close()
     fresh = []
     for market in scope["markets"]:
+        if market["market"] in blocked or market["market"] in terminal:continue
         old = manifest["ownership"].get(market["market"])
         if old:
             if old["assets"] != market["assets"] or old["version"] != market["version"]:
@@ -51,13 +76,16 @@ def enroll_locked(root, scope):
         group = fresh[start:start+settings["markets_per_cohort"]]
         index = len(manifest["cohorts"])
         if 22000+index*3+2 >= 65000:
-            raise ValueError("PORT_SPACE_EXHAUSTED")
+            scope['unadmitted_groups'].extend({'market':m['market'],'reason':'PORT_SPACE_EXHAUSTED'} for m in fresh[start:])
+            break
         name = f"{index:04d}"
         group_scope = {**scope,"markets":group,"scope_kind":"UNIVERSE_OWNERSHIP_COHORT",
             "parent_catalog_digest":scope["catalog_digest"],"catalog_digest":hashlib.sha256(json_bytes(group)).hexdigest()}
         # The full denominator is stored once, not copied into every RUN_START.
         group_scope.pop("excluded",None)
         group_scope.pop("unresolved",None)
+        for field in ('terminal_evidence','scope_exclusions','unadmitted_groups','pending_validation'):
+            group_scope.pop(field,None)
         atomic_json(root/"scopes"/(name+".json"),group_scope)
         for offset, role in enumerate(("P","Q","G")):
             instance = role+"-"+name
@@ -79,22 +107,30 @@ def enroll_locked(root, scope):
         manifest["cohorts"].append({"id":name,"markets":len(group),"tokens":2*len(group),"created_ns":time.time_ns()})
         for market in group:
             manifest["ownership"][market["market"]] = {"cohort":name,"assets":market["assets"],"version":market["version"]}
-    if scope["full_universe_sweep"]:
-        manifest["last_full_sweep"] = {"sweep_end_ns":scope["sweep_end_ns"],"markets":len(scope["markets"]),"catalog_digest":scope["catalog_digest"]}
+    if input_scope.get("full_universe_sweep"):
+        manifest["last_full_sweep"] = {"sweep_end_ns":input_scope["sweep_end_ns"],"markets":len(input_scope["markets"]),"catalog_digest":input_scope["catalog_digest"]}
     manifest.update(utc_ns=time.time_ns(),latest_catalog_digest=scope["catalog_digest"],
-        latest_catalog_markets=len(scope["markets"]),latest_full_sweep=bool(manifest.get("last_full_sweep")),
+        latest_catalog_markets=manifest.get("last_full_sweep",{}).get("markets",len(input_scope["markets"])),desired_markets=len(scope["markets"]),catalog_revision=scope["catalog_revision"],scope_policy_version=scope["scope_policy_version"],membership_digest=scope["membership_digest"],unadmitted_groups=scope["unadmitted_groups"],latest_full_sweep=bool(manifest.get("last_full_sweep")),
         missing_from_current_catalog=sorted(set(manifest["ownership"])-{m["market"] for m in scope["markets"]}))
     atomic_json(manifest_path,manifest)
     atomic_json(root/"deployment-summary.json",{k:v for k,v in manifest.items() if k != "ownership"} | {"assigned_markets":len(manifest["ownership"])})
+    controls={c['id']:[] for c in manifest['cohorts']}
+    for row in scope['terminal_evidence']+scope['scope_exclusions']+scope['unadmitted_groups']:
+        if row['market'] in manifest['ownership']:
+            controls[manifest['ownership'][row['market']]['cohort']].append({**row,'reason':row.get('reason','CATALOG_TERMINAL_OR_EXCLUDED')})
+    for cohort,blocked_rows in controls.items():
+        atomic_json(root/'controls'/(cohort+'.json'),{'catalog_revision':scope['catalog_revision'],
+            'scope_policy_version':scope['scope_policy_version'],'membership_digest':scope['membership_digest'],'blocked':blocked_rows})
+    # Commit after all cohort files; readers defer future revisions until this head.
+    atomic_json(root/'catalog-head.json',{'catalog_revision':scope['catalog_revision'],
+        'scope_policy_version':scope['scope_policy_version'],'membership_digest':scope['membership_digest'],
+        'desired_markets':len(scope['markets']),'last_complete_scan':scope['last_complete_scan']})
     # Save membership before launching so a crash cannot create a second owner.
     # Retry every existing cohort after controller restart or partial systemctl failure.
     active_units, stopped_units = [], []
     quarantined = {c["old"]["cohort"] for c in manifest["conflicts"]}
     for cohort in manifest["cohorts"]:
         names = [unit(role+"-"+cohort["id"]) for role in ("P","Q","G")]
-        if cohort["id"] in quarantined:
-            stopped_units.extend(names)
-            continue
         active_units.extend(names)
     if stopped_units:
         subprocess.run(["systemctl","--user","stop",*stopped_units],check=True)
@@ -185,20 +221,57 @@ def health(root):
 
 
 async def supervise(root):
+    from lobv2.catalog_feed import HTTPBudget,consume_outboxes,validate_pending,incremental_new_markets,revalidate_known_ids
+    from lobv2.catalog_owner import CatalogOwner
+    budget=HTTPBudget(load(root/'settings.json').get('catalog_requests_per_second',4))
+    # Restore durable membership before waiting for a potentially long full scan.
+    if (root/'universe.json').exists():await asyncio.to_thread(enroll,root,load(root/'universe.json'))
+    async def lifecycle():
+        while True:
+            try:
+                await asyncio.to_thread(consume_outboxes,root,load(root/'settings.json'))
+                await validate_pending(root,budget)
+                delta,watermark=await incremental_new_markets(root,budget)
+                owner=CatalogOwner(root)
+                revision=owner.metadata('revision',0);owner.close()
+                head=load(root/'catalog-head.json') if (root/'catalog-head.json').exists() else {}
+                if delta['markets'] or delta['excluded'] or revision!=head.get('catalog_revision'):
+                    await asyncio.to_thread(enroll,root,delta)
+                owner=CatalogOwner(root)
+                with owner.db:owner.set_metadata('incremental_gamma_id',watermark)
+                owner.close()
+                atomic_json(root/'incremental-discovery-status.json',{'utc_ns':time.time_ns(),'status':'COMPLETE','success_watermark':watermark})
+            except Exception as exc:
+                atomic_json(root/'incremental-discovery-status.json',{'utc_ns':time.time_ns(),'status':'FAILED_RETRY_PENDING','error':repr(exc)})
+            await asyncio.sleep(10)
     async def sweep(events):
         label = "events" if events else "markets"
         while True:
             try:
-                scope = await discover(events=events,progress_path=root/(label+"-sweep-progress.json"))
+                scope = await discover(events=events,progress_path=root/(label+"-sweep-progress.json"),budget=budget)
                 atomic_json(root/"catalogs"/(label+"-"+str(scope["sweep_end_ns"])+".json"),scope)
                 atomic_json(root/("events-universe.json" if events else "universe.json"),scope)
-                enroll(root,scope)
+                await asyncio.to_thread(enroll,root,scope)
                 atomic_json(root/(label+"-discovery-status.json"),{"utc_ns":time.time_ns(),"status":"COMPLETE",
                     "markets":len(scope["markets"]),"unresolved":len(scope["unresolved"]),"full_universe_sweep":scope["full_universe_sweep"]})
+                delay=load(root/"settings.json").get("discovery_seconds",120)
             except Exception as exc:
                 atomic_json(root/(label+"-discovery-status.json"),{"utc_ns":time.time_ns(),"status":"FAILED_RETRY_PENDING","error":repr(exc)})
-            await asyncio.sleep(load(root/"settings.json").get("discovery_seconds",120))
-    await asyncio.gather(sweep(False),sweep(True))
+                delay=30
+            await asyncio.sleep(delay)
+    async def revalidate():
+        while True:
+            try:
+                delta,receipt=await revalidate_known_ids(root,budget)
+                if delta['markets'] or delta['excluded']:await asyncio.to_thread(enroll,root,delta)
+                owner=CatalogOwner(root)
+                with owner.db:owner.set_metadata('revalidation_after_id',receipt['after_id'])
+                owner.close()
+                atomic_json(root/'identifier-revalidation-status.json',receipt)
+            except Exception as exc:
+                atomic_json(root/'identifier-revalidation-status.json',{'utc_ns':time.time_ns(),'status':'FAILED_RETRY_PENDING','error':repr(exc)})
+            await asyncio.sleep(10)
+    await asyncio.gather(sweep(False),sweep(True),lifecycle(),revalidate())
 
 
 def main():
@@ -212,6 +285,8 @@ def main():
         print(json.dumps({"cohorts":len(result["cohorts"]),"markets":len(result["ownership"])}))
     elif args.command == "instance":
         instance = load(args.root/"instances"/(args.instance+".json"))
+        instance['config'].update(catalog_control_file=str(args.root/'controls'/(args.instance.split('-',1)[1]+'.json')),
+            catalog_head_file=str(args.root/'catalog-head.json'))
         asyncio.run(run_node(instance["role"],instance["node_id"],instance["config"],load(Path(instance["scope_file"])),instance["root"]))
     elif args.command == "health":
         print(json.dumps(health(args.root),indent=2))
