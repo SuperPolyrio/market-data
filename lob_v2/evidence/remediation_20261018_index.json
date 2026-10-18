@@ -182,6 +182,12 @@
       "source": "/home/jiahuaiyu/develop/polymarket/repos/market-data/lob_v2/runs/remediation-20261017/soak/progress.json",
       "bytes": 568,
       "sha256": "234557e6bfcda61602d1cab6927fd6efbf446a4e53d9f411e7edc8f3ef18c41e"
+    },
+    {
+      "file": "lob_v2/evidence/remediation_20261018/runtime-configs.json",
+      "source": "ACTUAL_NODE_RUN_CONFIG_SHA_MATCHES_PROVENANCE",
+      "bytes": 26208,
+      "sha256": "661bcb29fb69fec671859084a8417c0288c7e490e6993e6a2934707e1cdbc2fc"
     }
   ],
   "large_local_inputs": [

@@ -1,0 +1,623 @@
+{
+  "utc_ns": 1792298706272120913,
+  "nodes": {
+    "P-0021": {
+      "stream": "818b8041-059a-4164-9dd7-b3a9359f6ec3",
+      "process_start_ns": 1792298135725771652,
+      "owned_markets": 4000,
+      "config": {
+        "archive": {
+          "evict_after_commit": true,
+          "poll_seconds": 10,
+          "ssh_store": {
+            "concurrency": 4,
+            "helper": "/mnt/polygon/lob-v2/bin/archive_receiver.py",
+            "host": "hy@10.7.7.223",
+            "identity_file": "/home/jiahuaiyu/.ssh/prediction_market_quant_xue_archive_ed25519",
+            "lock_root": "/data/jiahuaiyu/market-data/lob-v2/archive-locks",
+            "root": "/mnt/hdd22t/prediction-market-quant/lob_v2_archive"
+          }
+        },
+        "assets_per_connection": 500,
+        "backlog_reconnect_grace_seconds": 60,
+        "catalog_control_file": "/home/jiahuaiyu/develop/polymarket/repos/market-data/lob_v2/runs/production-20261017/controls/0021.json",
+        "catalog_head_file": "/home/jiahuaiyu/develop/polymarket/repos/market-data/lob_v2/runs/production-20261017/catalog-head.json",
+        "connection_rate_file": "/data/jiahuaiyu/market-data/lob-v2/connection-credit-P",
+        "connections_per_second": 4,
+        "first_snapshot_timeout_seconds": 60,
+        "group_fsync_ms": 20,
+        "heartbeat_seconds": 10,
+        "initial_pong_timeout_seconds": 300,
+        "lane_proxies": [
+          "socks5h://127.0.0.1:25172",
+          "socks5h://127.0.0.1:18460"
+        ],
+        "lanes": 2,
+        "listen": {
+          "host": "127.0.0.1",
+          "port": 22063,
+          "queue_bytes": 268435456
+        },
+        "maximum_healthy_rtt_ms": 2000,
+        "maximum_receive_backlog_seconds": 30,
+        "metrics_digests": false,
+        "metrics_history": false,
+        "metrics_seconds": 30,
+        "minimum_free_bytes": 107374182400,
+        "open_timeout_seconds": 90,
+        "outbound_proxy": "socks5h://127.0.0.1:18448",
+        "pong_timeout_seconds": 30,
+        "prefer_primary_lane": true,
+        "queue_bytes": 268435456,
+        "require_transport_proof": true,
+        "scope_file": "/home/jiahuaiyu/develop/polymarket/repos/market-data/lob_v2/runs/production-20261017/scopes/0021.json",
+        "segment_bytes": 134217728,
+        "segment_seconds": 300,
+        "spool_max_bytes": 2147483648,
+        "transport_proof_max_age_seconds": 30,
+        "ws_max_bytes": 8388608
+      },
+      "provenance": {
+        "clock_id": "ubuntu-4124G-NQ3:540998fa-76b9-4547-911f-6721a0d10157",
+        "code_version": "2.2.9",
+        "config_sha256": "4f3b447bbeb26d8e3c3fbf4f8d499108c015b0480892daea3177e6fa198a09b7",
+        "schema_sha256": "0ed2f222a8f9f657aba59d7c483e87c758e11ebcf64593fb71bb4b669079d4d8",
+        "scope_sha256": "7e8c8c36f4d723bd951acd81d7425d145dc4eb5453bd69d6eed95cee55b5e9d6",
+        "source_sha256": "13173c6b67c003fa7fbd01453b689841b5b10807640da6d328648fc674bdd096"
+      }
+    },
+    "Q-0069": {
+      "stream": "ce4b31c4-822d-45af-a333-df8fdc084370",
+      "process_start_ns": 1792298236554970131,
+      "owned_markets": 4000,
+      "config": {
+        "archive": {
+          "evict_after_commit": true,
+          "poll_seconds": 10,
+          "ssh_store": {
+            "concurrency": 4,
+            "helper": "/mnt/polygon/lob-v2/bin/archive_receiver.py",
+            "host": "hy@10.7.7.223",
+            "identity_file": "/home/jiahuaiyu/.ssh/prediction_market_quant_xue_archive_ed25519",
+            "lock_root": "/data/jiahuaiyu/market-data/lob-v2/archive-locks",
+            "root": "/mnt/hdd22t/prediction-market-quant/lob_v2_archive"
+          }
+        },
+        "assets_per_connection": 500,
+        "backlog_reconnect_grace_seconds": 60,
+        "catalog_control_file": "/home/jiahuaiyu/develop/polymarket/repos/market-data/lob_v2/runs/production-20261017/controls/0069.json",
+        "catalog_head_file": "/home/jiahuaiyu/develop/polymarket/repos/market-data/lob_v2/runs/production-20261017/catalog-head.json",
+        "connection_rate_file": "/data/jiahuaiyu/market-data/lob-v2/connection-credit-Q",
+        "connections_per_second": 4,
+        "first_snapshot_timeout_seconds": 60,
+        "group_fsync_ms": 20,
+        "heartbeat_seconds": 10,
+        "initial_pong_timeout_seconds": 300,
+        "lane_proxies": [
+          "socks5h://127.0.0.1:25172",
+          "socks5h://127.0.0.1:18461"
+        ],
+        "lanes": 2,
+        "listen": {
+          "host": "127.0.0.1",
+          "port": 22208,
+          "queue_bytes": 268435456
+        },
+        "maximum_healthy_rtt_ms": 2000,
+        "maximum_receive_backlog_seconds": 30,
+        "metrics_digests": false,
+        "metrics_history": false,
+        "metrics_seconds": 30,
+        "minimum_free_bytes": 107374182400,
+        "open_timeout_seconds": 90,
+        "outbound_proxy": "socks5h://127.0.0.1:18460",
+        "pong_timeout_seconds": 30,
+        "prefer_primary_lane": true,
+        "queue_bytes": 268435456,
+        "require_transport_proof": true,
+        "scope_file": "/home/jiahuaiyu/develop/polymarket/repos/market-data/lob_v2/runs/production-20261017/scopes/0069.json",
+        "segment_bytes": 134217728,
+        "segment_seconds": 300,
+        "spool_max_bytes": 2147483648,
+        "transport_proof_max_age_seconds": 30,
+        "ws_max_bytes": 8388608
+      },
+      "provenance": {
+        "clock_id": "ubuntu-4124G-NQ3:540998fa-76b9-4547-911f-6721a0d10157",
+        "code_version": "2.2.9",
+        "config_sha256": "d661e3424e886e8183c3a41ac1f84ff414440297d77592234752c100e0256566",
+        "schema_sha256": "0ed2f222a8f9f657aba59d7c483e87c758e11ebcf64593fb71bb4b669079d4d8",
+        "scope_sha256": "c434a5ba46a2d8bb4d9cc5b55903f3c88400967c43427365ddd672e42600f847",
+        "source_sha256": "13173c6b67c003fa7fbd01453b689841b5b10807640da6d328648fc674bdd096"
+      }
+    },
+    "P-0038": {
+      "stream": "fe82f1fb-232b-446b-93fb-193294bdab89",
+      "process_start_ns": 1792292964764498267,
+      "owned_markets": 4000,
+      "config": {
+        "archive": {
+          "evict_after_commit": true,
+          "poll_seconds": 10,
+          "ssh_store": {
+            "concurrency": 4,
+            "helper": "/mnt/polygon/lob-v2/bin/archive_receiver.py",
+            "host": "hy@10.7.7.223",
+            "identity_file": "/home/jiahuaiyu/.ssh/prediction_market_quant_xue_archive_ed25519",
+            "lock_root": "/data/jiahuaiyu/market-data/lob-v2/archive-locks",
+            "root": "/mnt/hdd22t/prediction-market-quant/lob_v2_archive"
+          }
+        },
+        "assets_per_connection": 500,
+        "backlog_reconnect_grace_seconds": 60,
+        "catalog_control_file": "/home/jiahuaiyu/develop/polymarket/repos/market-data/lob_v2/runs/production-20261017/controls/0038.json",
+        "catalog_head_file": "/home/jiahuaiyu/develop/polymarket/repos/market-data/lob_v2/runs/production-20261017/catalog-head.json",
+        "connection_rate_file": "/data/jiahuaiyu/market-data/lob-v2/connection-credit-P",
+        "connections_per_second": 4,
+        "first_snapshot_timeout_seconds": 300,
+        "group_fsync_ms": 20,
+        "heartbeat_seconds": 10,
+        "initial_pong_timeout_seconds": 300,
+        "lane_provider_domains": [
+          "profile12",
+          "LA"
+        ],
+        "lane_proxies": [
+          "socks5h://127.0.0.1:25172",
+          "socks5h://127.0.0.1:18460"
+        ],
+        "lanes": 2,
+        "listen": {
+          "host": "127.0.0.1",
+          "port": 22114,
+          "queue_bytes": 268435456
+        },
+        "maximum_healthy_rtt_ms": 2000,
+        "maximum_receive_backlog_seconds": 30,
+        "metrics_digests": false,
+        "metrics_history": false,
+        "metrics_seconds": 30,
+        "minimum_free_bytes": 107374182400,
+        "open_timeout_seconds": 90,
+        "outbound_proxy": "socks5h://127.0.0.1:18448",
+        "pong_timeout_seconds": 30,
+        "prefer_primary_lane": true,
+        "queue_bytes": 268435456,
+        "require_transport_proof": true,
+        "segment_bytes": 134217728,
+        "segment_seconds": 300,
+        "spool_max_bytes": 2147483648,
+        "transport_proof_max_age_seconds": 30,
+        "ws_max_bytes": 8388608
+      },
+      "provenance": {
+        "clock_id": "ubuntu-4124G-NQ3:540998fa-76b9-4547-911f-6721a0d10157",
+        "code_version": "2.2.0",
+        "config_sha256": "6e67e7a759848bf7b67e6fad6939062d516f10b418b0aa9c77eae3d5317ddb34",
+        "schema_sha256": "0ed2f222a8f9f657aba59d7c483e87c758e11ebcf64593fb71bb4b669079d4d8",
+        "scope_sha256": "38428cffbde036f8f264c5639af1babdb9237cb809c430bed92848cdfbd8bf0e",
+        "source_sha256": "6a8fc464b237620ed4cbeb36542a3bfab9c3d0478a1d3d9224dec17f786e538d"
+      }
+    },
+    "Q-0038": {
+      "stream": "6f614430-d552-40b6-8578-58330253e548",
+      "process_start_ns": 1792297099798147974,
+      "owned_markets": 4000,
+      "config": {
+        "archive": {
+          "evict_after_commit": true,
+          "poll_seconds": 10,
+          "ssh_store": {
+            "concurrency": 4,
+            "helper": "/mnt/polygon/lob-v2/bin/archive_receiver.py",
+            "host": "hy@10.7.7.223",
+            "identity_file": "/home/jiahuaiyu/.ssh/prediction_market_quant_xue_archive_ed25519",
+            "lock_root": "/data/jiahuaiyu/market-data/lob-v2/archive-locks",
+            "root": "/mnt/hdd22t/prediction-market-quant/lob_v2_archive"
+          }
+        },
+        "assets_per_connection": 500,
+        "backlog_reconnect_grace_seconds": 60,
+        "catalog_control_file": "/home/jiahuaiyu/develop/polymarket/repos/market-data/lob_v2/runs/production-20261017/controls/0038.json",
+        "catalog_head_file": "/home/jiahuaiyu/develop/polymarket/repos/market-data/lob_v2/runs/production-20261017/catalog-head.json",
+        "connection_rate_file": "/data/jiahuaiyu/market-data/lob-v2/connection-credit-Q",
+        "connections_per_second": 4,
+        "first_snapshot_timeout_seconds": 300,
+        "group_fsync_ms": 20,
+        "heartbeat_seconds": 10,
+        "initial_pong_timeout_seconds": 300,
+        "lane_provider_domains": [
+          "profile12",
+          "LA"
+        ],
+        "lane_proxies": [
+          "socks5h://127.0.0.1:25172",
+          "socks5h://127.0.0.1:18461"
+        ],
+        "lanes": 2,
+        "listen": {
+          "host": "127.0.0.1",
+          "port": 22115,
+          "queue_bytes": 268435456
+        },
+        "maximum_healthy_rtt_ms": 2000,
+        "maximum_receive_backlog_seconds": 30,
+        "metrics_digests": false,
+        "metrics_history": false,
+        "metrics_seconds": 30,
+        "minimum_free_bytes": 107374182400,
+        "open_timeout_seconds": 90,
+        "outbound_proxy": "socks5h://127.0.0.1:18460",
+        "pong_timeout_seconds": 30,
+        "prefer_primary_lane": true,
+        "queue_bytes": 268435456,
+        "require_transport_proof": true,
+        "segment_bytes": 134217728,
+        "segment_seconds": 300,
+        "spool_max_bytes": 2147483648,
+        "transport_proof_max_age_seconds": 30,
+        "ws_max_bytes": 8388608
+      },
+      "provenance": {
+        "clock_id": "ubuntu-4124G-NQ3:540998fa-76b9-4547-911f-6721a0d10157",
+        "code_version": "2.2.0",
+        "config_sha256": "eae7257ad4a1d9a78f44780f1ab92921aa9a4bf639f483a9a9fd843f4c2d1299",
+        "schema_sha256": "0ed2f222a8f9f657aba59d7c483e87c758e11ebcf64593fb71bb4b669079d4d8",
+        "scope_sha256": "38428cffbde036f8f264c5639af1babdb9237cb809c430bed92848cdfbd8bf0e",
+        "source_sha256": "6a8fc464b237620ed4cbeb36542a3bfab9c3d0478a1d3d9224dec17f786e538d"
+      }
+    },
+    "G-0038": {
+      "stream": "9f61daa6-b288-4a8b-98e6-3e904ba93b15",
+      "process_start_ns": 1792297652268476379,
+      "owned_markets": 4000,
+      "config": {
+        "archive": {
+          "evict_after_commit": true,
+          "poll_seconds": 10,
+          "ssh_store": {
+            "concurrency": 4,
+            "helper": "/mnt/polygon/lob-v2/bin/archive_receiver.py",
+            "host": "hy@10.7.7.223",
+            "identity_file": "/home/jiahuaiyu/.ssh/prediction_market_quant_xue_archive_ed25519",
+            "lock_root": "/data/jiahuaiyu/market-data/lob-v2/archive-locks",
+            "root": "/mnt/hdd22t/prediction-market-quant/lob_v2_archive"
+          }
+        },
+        "assets_per_connection": 2000,
+        "backlog_reconnect_grace_seconds": 60,
+        "catalog_control_file": "/home/jiahuaiyu/develop/polymarket/repos/market-data/lob_v2/runs/production-20261017/controls/0038.json",
+        "catalog_head_file": "/home/jiahuaiyu/develop/polymarket/repos/market-data/lob_v2/runs/production-20261017/catalog-head.json",
+        "connections_per_second": 4,
+        "first_snapshot_timeout_seconds": 300,
+        "group_fsync_ms": 20,
+        "heartbeat_seconds": 10,
+        "initial_pong_timeout_seconds": 300,
+        "lane_provider_domains": [
+          "profile12",
+          "LA"
+        ],
+        "lanes": 2,
+        "listen": {
+          "host": "127.0.0.1",
+          "port": 22116,
+          "queue_bytes": 268435456
+        },
+        "maximum_healthy_rtt_ms": 2000,
+        "maximum_receive_backlog_seconds": 30,
+        "metrics_digests": false,
+        "metrics_history": false,
+        "metrics_seconds": 30,
+        "minimum_free_bytes": 107374182400,
+        "open_timeout_seconds": 90,
+        "outbound_proxy": "env",
+        "plants": {
+          "P-0038": {
+            "host": "127.0.0.1",
+            "port": 22114
+          },
+          "Q-0038": {
+            "host": "127.0.0.1",
+            "port": 22115
+          }
+        },
+        "pong_timeout_seconds": 30,
+        "prefer_primary_lane": true,
+        "queue_bytes": 268435456,
+        "require_transport_proof": true,
+        "scope_file": "/home/jiahuaiyu/develop/polymarket/repos/market-data/lob_v2/runs/production-20261017/scopes/0038.json",
+        "segment_bytes": 134217728,
+        "segment_seconds": 300,
+        "spool_max_bytes": 2147483648,
+        "transport_proof_max_age_seconds": 30,
+        "ws_max_bytes": 8388608
+      },
+      "provenance": {
+        "clock_id": "ubuntu-4124G-NQ3:540998fa-76b9-4547-911f-6721a0d10157",
+        "code_version": "2.2.8",
+        "config_sha256": "5571354e92d193c610a056c9ee0206f98c9a09d1d8afb07dde330fca9acfac64",
+        "schema_sha256": "0ed2f222a8f9f657aba59d7c483e87c758e11ebcf64593fb71bb4b669079d4d8",
+        "scope_sha256": "38428cffbde036f8f264c5639af1babdb9237cb809c430bed92848cdfbd8bf0e",
+        "source_sha256": "2c865f76fddd18ab89f139d5d02f4eae798db6fb716b3dea28c409a3f41054fa"
+      }
+    },
+    "G-0105": {
+      "stream": "0b07c9b0-9ad3-4cdf-acac-e9d3db2386b9",
+      "process_start_ns": 1792297652837356928,
+      "owned_markets": 4000,
+      "config": {
+        "archive": {
+          "evict_after_commit": true,
+          "poll_seconds": 10,
+          "ssh_store": {
+            "concurrency": 4,
+            "helper": "/mnt/polygon/lob-v2/bin/archive_receiver.py",
+            "host": "hy@10.7.7.223",
+            "identity_file": "/home/jiahuaiyu/.ssh/prediction_market_quant_xue_archive_ed25519",
+            "lock_root": "/data/jiahuaiyu/market-data/lob-v2/archive-locks",
+            "root": "/mnt/hdd22t/prediction-market-quant/lob_v2_archive"
+          }
+        },
+        "assets_per_connection": 2000,
+        "backlog_reconnect_grace_seconds": 60,
+        "catalog_control_file": "/home/jiahuaiyu/develop/polymarket/repos/market-data/lob_v2/runs/production-20261017/controls/0105.json",
+        "catalog_head_file": "/home/jiahuaiyu/develop/polymarket/repos/market-data/lob_v2/runs/production-20261017/catalog-head.json",
+        "connections_per_second": 4,
+        "first_snapshot_timeout_seconds": 300,
+        "group_fsync_ms": 20,
+        "heartbeat_seconds": 10,
+        "initial_pong_timeout_seconds": 300,
+        "lanes": 2,
+        "listen": {
+          "host": "127.0.0.1",
+          "port": 22317,
+          "queue_bytes": 268435456
+        },
+        "maximum_healthy_rtt_ms": 2000,
+        "maximum_receive_backlog_seconds": 30,
+        "metrics_digests": false,
+        "metrics_history": false,
+        "metrics_seconds": 30,
+        "minimum_free_bytes": 107374182400,
+        "open_timeout_seconds": 90,
+        "outbound_proxy": "env",
+        "plants": {
+          "P-0105": {
+            "host": "127.0.0.1",
+            "port": 22315
+          },
+          "Q-0105": {
+            "host": "127.0.0.1",
+            "port": 22316
+          }
+        },
+        "pong_timeout_seconds": 30,
+        "prefer_primary_lane": true,
+        "queue_bytes": 268435456,
+        "require_transport_proof": true,
+        "scope_file": "/home/jiahuaiyu/develop/polymarket/repos/market-data/lob_v2/runs/production-20261017/scopes/0105.json",
+        "segment_bytes": 134217728,
+        "segment_seconds": 300,
+        "spool_max_bytes": 2147483648,
+        "transport_proof_max_age_seconds": 30,
+        "ws_max_bytes": 8388608
+      },
+      "provenance": {
+        "clock_id": "ubuntu-4124G-NQ3:540998fa-76b9-4547-911f-6721a0d10157",
+        "code_version": "2.2.8",
+        "config_sha256": "db80d996a3e6887e3f4567e78238bf3975188b742a1ceafbd4c0a39b2ec8e4d7",
+        "schema_sha256": "0ed2f222a8f9f657aba59d7c483e87c758e11ebcf64593fb71bb4b669079d4d8",
+        "scope_sha256": "812ac468561e83edfd300badc9279220c87de8a94add838443cfee385b3e14b5",
+        "source_sha256": "2c865f76fddd18ab89f139d5d02f4eae798db6fb716b3dea28c409a3f41054fa"
+      }
+    },
+    "P-0123": {
+      "stream": "c3f0a506-8933-471c-9cfc-d406e7fec2ac",
+      "process_start_ns": 1792293892720601466,
+      "owned_markets": 19,
+      "config": {
+        "archive": {
+          "evict_after_commit": true,
+          "poll_seconds": 10,
+          "ssh_store": {
+            "concurrency": 4,
+            "helper": "/mnt/polygon/lob-v2/bin/archive_receiver.py",
+            "host": "hy@10.7.7.223",
+            "identity_file": "/home/jiahuaiyu/.ssh/prediction_market_quant_xue_archive_ed25519",
+            "lock_root": "/data/jiahuaiyu/market-data/lob-v2/archive-locks",
+            "root": "/mnt/hdd22t/prediction-market-quant/lob_v2_archive"
+          }
+        },
+        "assets_per_connection": 500,
+        "backlog_reconnect_grace_seconds": 60,
+        "catalog_control_file": "/home/jiahuaiyu/develop/polymarket/repos/market-data/lob_v2/runs/production-20261017/controls/0123.json",
+        "catalog_head_file": "/home/jiahuaiyu/develop/polymarket/repos/market-data/lob_v2/runs/production-20261017/catalog-head.json",
+        "connection_rate_file": "/data/jiahuaiyu/market-data/lob-v2/connection-credit-P",
+        "connections_per_second": 4,
+        "first_snapshot_timeout_seconds": 300,
+        "group_fsync_ms": 20,
+        "heartbeat_seconds": 10,
+        "initial_pong_timeout_seconds": 300,
+        "lane_provider_domains": [
+          "profile12",
+          "LA"
+        ],
+        "lane_proxies": [
+          "socks5h://127.0.0.1:25172",
+          "socks5h://127.0.0.1:18460"
+        ],
+        "lanes": 2,
+        "listen": {
+          "host": "127.0.0.1",
+          "port": 22369,
+          "queue_bytes": 268435456
+        },
+        "maximum_healthy_rtt_ms": 2000,
+        "maximum_receive_backlog_seconds": 30,
+        "metrics_digests": false,
+        "metrics_history": false,
+        "metrics_seconds": 30,
+        "minimum_free_bytes": 107374182400,
+        "open_timeout_seconds": 90,
+        "outbound_proxy": "socks5h://127.0.0.1:18448",
+        "pong_timeout_seconds": 30,
+        "prefer_primary_lane": true,
+        "queue_bytes": 268435456,
+        "require_transport_proof": true,
+        "scope_file": "/home/jiahuaiyu/develop/polymarket/repos/market-data/lob_v2/runs/production-20261017/scopes/0123.json",
+        "segment_bytes": 134217728,
+        "segment_seconds": 300,
+        "spool_max_bytes": 2147483648,
+        "transport_proof_max_age_seconds": 30,
+        "ws_max_bytes": 8388608
+      },
+      "provenance": {
+        "clock_id": "ubuntu-4124G-NQ3:540998fa-76b9-4547-911f-6721a0d10157",
+        "code_version": "2.2.1",
+        "config_sha256": "97611436c59b69e5df1be7b1b8c7832b606a23404ad70adde4074fd02c0f3916",
+        "schema_sha256": "0ed2f222a8f9f657aba59d7c483e87c758e11ebcf64593fb71bb4b669079d4d8",
+        "scope_sha256": "81526b9d19dc101bda23fbdef8ed26169aa43662a425eb79289d9bdc5333eea8",
+        "source_sha256": "50dafe3a5f080257582b2fd0e71867ff0b9b2e7f60f9f87f42d81db63a27705c"
+      }
+    },
+    "Q-0123": {
+      "stream": "5f64f65b-ce84-4d67-91d9-991879e47528",
+      "process_start_ns": 1792293890880777883,
+      "owned_markets": 19,
+      "config": {
+        "archive": {
+          "evict_after_commit": true,
+          "poll_seconds": 10,
+          "ssh_store": {
+            "concurrency": 4,
+            "helper": "/mnt/polygon/lob-v2/bin/archive_receiver.py",
+            "host": "hy@10.7.7.223",
+            "identity_file": "/home/jiahuaiyu/.ssh/prediction_market_quant_xue_archive_ed25519",
+            "lock_root": "/data/jiahuaiyu/market-data/lob-v2/archive-locks",
+            "root": "/mnt/hdd22t/prediction-market-quant/lob_v2_archive"
+          }
+        },
+        "assets_per_connection": 500,
+        "backlog_reconnect_grace_seconds": 60,
+        "catalog_control_file": "/home/jiahuaiyu/develop/polymarket/repos/market-data/lob_v2/runs/production-20261017/controls/0123.json",
+        "catalog_head_file": "/home/jiahuaiyu/develop/polymarket/repos/market-data/lob_v2/runs/production-20261017/catalog-head.json",
+        "connection_rate_file": "/data/jiahuaiyu/market-data/lob-v2/connection-credit-Q",
+        "connections_per_second": 4,
+        "first_snapshot_timeout_seconds": 300,
+        "group_fsync_ms": 20,
+        "heartbeat_seconds": 10,
+        "initial_pong_timeout_seconds": 300,
+        "lane_provider_domains": [
+          "profile12",
+          "LA"
+        ],
+        "lane_proxies": [
+          "socks5h://127.0.0.1:25172",
+          "socks5h://127.0.0.1:18461"
+        ],
+        "lanes": 2,
+        "listen": {
+          "host": "127.0.0.1",
+          "port": 22370,
+          "queue_bytes": 268435456
+        },
+        "maximum_healthy_rtt_ms": 2000,
+        "maximum_receive_backlog_seconds": 30,
+        "metrics_digests": false,
+        "metrics_history": false,
+        "metrics_seconds": 30,
+        "minimum_free_bytes": 107374182400,
+        "open_timeout_seconds": 90,
+        "outbound_proxy": "socks5h://127.0.0.1:18460",
+        "pong_timeout_seconds": 30,
+        "prefer_primary_lane": true,
+        "queue_bytes": 268435456,
+        "require_transport_proof": true,
+        "scope_file": "/home/jiahuaiyu/develop/polymarket/repos/market-data/lob_v2/runs/production-20261017/scopes/0123.json",
+        "segment_bytes": 134217728,
+        "segment_seconds": 300,
+        "spool_max_bytes": 2147483648,
+        "transport_proof_max_age_seconds": 30,
+        "ws_max_bytes": 8388608
+      },
+      "provenance": {
+        "clock_id": "ubuntu-4124G-NQ3:540998fa-76b9-4547-911f-6721a0d10157",
+        "code_version": "2.2.1",
+        "config_sha256": "7cfe347bb3489c459ac3f7b7a6486ad78098e25e41a21e0a3cdec82c1d89a408",
+        "schema_sha256": "0ed2f222a8f9f657aba59d7c483e87c758e11ebcf64593fb71bb4b669079d4d8",
+        "scope_sha256": "81526b9d19dc101bda23fbdef8ed26169aa43662a425eb79289d9bdc5333eea8",
+        "source_sha256": "50dafe3a5f080257582b2fd0e71867ff0b9b2e7f60f9f87f42d81db63a27705c"
+      }
+    },
+    "G-0123": {
+      "stream": "34146ecd-883f-43c2-81dc-6cbcc7bc7656",
+      "process_start_ns": 1792293887863068093,
+      "owned_markets": 19,
+      "config": {
+        "archive": {
+          "evict_after_commit": true,
+          "poll_seconds": 10,
+          "ssh_store": {
+            "concurrency": 4,
+            "helper": "/mnt/polygon/lob-v2/bin/archive_receiver.py",
+            "host": "hy@10.7.7.223",
+            "identity_file": "/home/jiahuaiyu/.ssh/prediction_market_quant_xue_archive_ed25519",
+            "lock_root": "/data/jiahuaiyu/market-data/lob-v2/archive-locks",
+            "root": "/mnt/hdd22t/prediction-market-quant/lob_v2_archive"
+          }
+        },
+        "assets_per_connection": 2000,
+        "backlog_reconnect_grace_seconds": 60,
+        "catalog_control_file": "/home/jiahuaiyu/develop/polymarket/repos/market-data/lob_v2/runs/production-20261017/controls/0123.json",
+        "catalog_head_file": "/home/jiahuaiyu/develop/polymarket/repos/market-data/lob_v2/runs/production-20261017/catalog-head.json",
+        "connections_per_second": 4,
+        "first_snapshot_timeout_seconds": 300,
+        "group_fsync_ms": 20,
+        "heartbeat_seconds": 10,
+        "initial_pong_timeout_seconds": 300,
+        "lanes": 2,
+        "listen": {
+          "host": "127.0.0.1",
+          "port": 22371,
+          "queue_bytes": 268435456
+        },
+        "maximum_healthy_rtt_ms": 2000,
+        "maximum_receive_backlog_seconds": 30,
+        "metrics_digests": false,
+        "metrics_history": false,
+        "metrics_seconds": 30,
+        "minimum_free_bytes": 107374182400,
+        "open_timeout_seconds": 90,
+        "outbound_proxy": "env",
+        "plants": {
+          "P-0123": {
+            "host": "127.0.0.1",
+            "port": 22369
+          },
+          "Q-0123": {
+            "host": "127.0.0.1",
+            "port": 22370
+          }
+        },
+        "pong_timeout_seconds": 30,
+        "prefer_primary_lane": true,
+        "queue_bytes": 268435456,
+        "require_transport_proof": true,
+        "scope_file": "/home/jiahuaiyu/develop/polymarket/repos/market-data/lob_v2/runs/production-20261017/scopes/0123.json",
+        "segment_bytes": 134217728,
+        "segment_seconds": 300,
+        "spool_max_bytes": 2147483648,
+        "transport_proof_max_age_seconds": 30,
+        "ws_max_bytes": 8388608
+      },
+      "provenance": {
+        "clock_id": "ubuntu-4124G-NQ3:540998fa-76b9-4547-911f-6721a0d10157",
+        "code_version": "2.2.1",
+        "config_sha256": "70fb2a6faf744ed8f018cdc38f44c6e3bc1e8d25eb6754c068f207cbcda635aa",
+        "schema_sha256": "0ed2f222a8f9f657aba59d7c483e87c758e11ebcf64593fb71bb4b669079d4d8",
+        "scope_sha256": "81526b9d19dc101bda23fbdef8ed26169aa43662a425eb79289d9bdc5333eea8",
+        "source_sha256": "50dafe3a5f080257582b2fd0e71867ff0b9b2e7f60f9f87f42d81db63a27705c"
+      }
+    }
+  }
+}
