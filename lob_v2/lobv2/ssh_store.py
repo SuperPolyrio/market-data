@@ -13,8 +13,9 @@ from contextlib import contextmanager
 
 
 def control_socket(directory, identity, index):
-    path=directory/("ssh-"+identity+"-"+str(index))
-    if len(os.fsencode(path))<100:return str(path)
+    path=(directory/("ssh-"+identity+"-"+str(index))).absolute()
+    # OpenSSH appends a temporary listener suffix before its atomic rename.
+    if len(os.fsencode(path))<80:return str(path)
     short=Path(tempfile.gettempdir())/('lobv2-ssh-'+str(os.getuid()))
     short.mkdir(mode=0o700,exist_ok=True)
     if short.is_symlink() or short.stat().st_uid!=os.getuid() or short.stat().st_mode&0o077:

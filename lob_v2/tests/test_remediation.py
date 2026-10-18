@@ -445,7 +445,7 @@ def test_long_query_work_directory_has_bounded_private_ssh_control_socket(tmp_pa
     from lobv2.ssh_store import control_socket
     from pathlib import Path
     path=control_socket(tmp_path/('long-directory-'*20),'identity',0)
-    assert len(os.fsencode(path))<108
+    assert len(os.fsencode(path))+18<108
     assert Path(path).parent.stat().st_mode&0o077==0
     assert path==control_socket(tmp_path/('long-directory-'*20),'identity',0)
     assert path!=control_socket(tmp_path/('long-directory-'*20),'identity',1)
