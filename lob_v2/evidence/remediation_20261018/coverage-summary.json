@@ -1,0 +1,95 @@
+{
+  "assigned_markets": 351831,
+  "assigned_tokens": 703662,
+  "candidate_token_observations": 0,
+  "catalog_digest": "c3a08848cc595da0b5b2ac620ce35f8e9d6b3c2b5e33b6852c52d9a05aa276ba",
+  "catalog_sweep_end_ns": 1792243674096851915,
+  "catalog_sweep_start_ns": 1792240976837435779,
+  "census_markets": 289611,
+  "census_tokens": 579222,
+  "desired_catalog_revision": 379415,
+  "desired_markets": 324184,
+  "desired_membership_digest": "3b98547b0d62b3210fef39d65769ede00521e9ac5ad77a1f320b1916c1036c9a",
+  "desired_tokens": 648368,
+  "finished_ns": 1792296886601787466,
+  "full_universe_sweep": true,
+  "query_projection": "TOKEN_COVERAGE_ONLY_NOT_TAPE_QUERY_COMPLETION",
+  "started_ns": 1792296780101610015,
+  "unresolved_catalog_rows": 44,
+  "upstream_native_event_completeness": "UNKNOWN",
+  "desired_unassigned_count": 0,
+  "assigned_not_desired_count": 27647,
+  "catalog_markets_unassigned_count": 0,
+  "stale_instances_count": 0,
+  "catalog_revision_mismatches_count": 372,
+  "duplicate_market_owners_count": 0,
+  "roles": {
+    "G": {
+      "census_coverage": 0.6296894800266565,
+      "qualified_census_markets": 182365,
+      "qualified_census_tokens": 364730,
+      "qualified_markets_all": 205101,
+      "qualified_tokens_all": 410202
+    },
+    "P": {
+      "census_coverage": 0.4781689921998819,
+      "qualified_census_markets": 138483,
+      "qualified_census_tokens": 276966,
+      "qualified_markets_all": 155095,
+      "qualified_tokens_all": 310190
+    },
+    "Q": {
+      "census_coverage": 0.4902714330602084,
+      "qualified_census_markets": 141988,
+      "qualified_census_tokens": 283976,
+      "qualified_markets_all": 163561,
+      "qualified_tokens_all": 327122
+    }
+  },
+  "lane_observations": {
+    "P": {
+      "0": {
+        "assigned": 703662,
+        "baseline_durable": 513028,
+        "book_seen": 513071,
+        "ready": 305836,
+        "written": 699600
+      },
+      "1": {
+        "assigned": 703662,
+        "baseline_durable": 97906,
+        "book_seen": 97906,
+        "ready": 132,
+        "written": 388194
+      }
+    },
+    "Q": {
+      "0": {
+        "assigned": 703662,
+        "baseline_durable": 512522,
+        "book_seen": 512522,
+        "ready": 330184,
+        "written": 699666
+      },
+      "1": {
+        "assigned": 703662,
+        "baseline_durable": 84210,
+        "book_seen": 84210,
+        "ready": 216,
+        "written": 332092
+      }
+    }
+  },
+  "transport_lanes": {
+    "P": {
+      "healthy_lanes": 247,
+      "observed_lanes": 773,
+      "unqualified_lanes": 526
+    },
+    "Q": {
+      "healthy_lanes": 269,
+      "observed_lanes": 773,
+      "unqualified_lanes": 504
+    }
+  }
+}

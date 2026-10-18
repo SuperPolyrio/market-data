@@ -1,0 +1,12 @@
+[Unit]
+Description=V2 full-fleet bounded acceptance observations
+[Service]
+ExecStart=/home/jiahuaiyu/develop/polymarket/repos/market-data/.venv/bin/python /home/jiahuaiyu/develop/polymarket/repos/market-data/lob_v2/releases/baf84c1d8ee4/tools/soak_watch.py --deployment /home/jiahuaiyu/develop/polymarket/repos/market-data/lob_v2/runs/production-20261017 --output /home/jiahuaiyu/develop/polymarket/repos/market-data/lob_v2/runs/remediation-20261017/soak --detailed G-0038 --detailed G-0105 --detailed P-0038 --detailed Q-0038
+Environment=PYTHONDONTWRITEBYTECODE=1
+Nice=15
+CPUQuota=100%
+MemoryMax=2G
+Restart=on-failure
+RestartSec=15
+[Install]
+WantedBy=default.target

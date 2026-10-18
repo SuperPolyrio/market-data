@@ -1,0 +1,48 @@
+{
+  "before": {
+    "records": 18217,
+    "markets": 2640,
+    "kinds": {
+      "SOURCE_RESET": 5289,
+      "CHANGE_GROUP": 7633,
+      "SNAPSHOT": 6,
+      "GAP": 5289
+    },
+    "skipped_before_reset": 0,
+    "input_sha256": "3c3bf95504c28dc7952cfe8f05e0c64fa6a1bebdcb2a5a4c581ca46504440814",
+    "every_cut_and_frame_sha256": "0d188d08c4596eceb5b21a092ad88ac8dbad2030517c8b4ee11541458fe80150",
+    "book_apply_ms": {
+      "p50": 0.204391,
+      "p95": 1.040452,
+      "p99": 1.576698
+    },
+    "book_apply_sum_ms": 6416.24933,
+    "max_ms": 100.960757,
+    "elapsed_seconds": 9.563529851,
+    "measurement_scope": "prepare once and apply working+committed; excludes network, JSON decoding, journal I/O and verification hashing"
+  },
+  "after": {
+    "records": 18217,
+    "markets": 2640,
+    "kinds": {
+      "SOURCE_RESET": 5289,
+      "CHANGE_GROUP": 7633,
+      "SNAPSHOT": 6,
+      "GAP": 5289
+    },
+    "skipped_before_reset": 0,
+    "input_sha256": "3c3bf95504c28dc7952cfe8f05e0c64fa6a1bebdcb2a5a4c581ca46504440814",
+    "every_cut_and_frame_sha256": "0d188d08c4596eceb5b21a092ad88ac8dbad2030517c8b4ee11541458fe80150",
+    "book_apply_ms": {
+      "p50": 0.018789,
+      "p95": 0.182117,
+      "p99": 0.3683
+    },
+    "book_apply_sum_ms": 716.060048,
+    "max_ms": 1.763491,
+    "elapsed_seconds": 3.363372282,
+    "measurement_scope": "prepare once and apply working+committed; excludes network, JSON decoding, journal I/O and verification hashing"
+  },
+  "every_committed_cut_identical": true,
+  "book_apply_speedup": 8.960490601201645
+}

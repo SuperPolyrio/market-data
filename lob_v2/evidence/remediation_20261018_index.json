@@ -1,0 +1,214 @@
+{
+  "generated_ns": 1792298588019210132,
+  "overall": "PARTIAL",
+  "report": "lob_v2/production_acceptance_20261018.md",
+  "small_artifacts": [
+    {
+      "file": "lob_v2/evidence/remediation_20261018/candidate-2.2.9-tests.xml",
+      "source": "/home/jiahuaiyu/develop/polymarket/repos/market-data/lob_v2/runs/remediation-20261017/candidate-2.2.9-tests.xml",
+      "bytes": 13053,
+      "sha256": "a3ea92079ee12064b7050569a140518503b4d48c8b98e22838d76a2f7d1fd56c"
+    },
+    {
+      "file": "lob_v2/evidence/remediation_20261018/candidate-2.2.8-tests.xml",
+      "source": "/home/jiahuaiyu/develop/polymarket/repos/market-data/lob_v2/runs/remediation-20261017/candidate-2.2.8-tests.xml",
+      "bytes": 12903,
+      "sha256": "80c4678cf3d57963b0df4a35bf5c027df018ba06cc2d73746f2195ea4a652038"
+    },
+    {
+      "file": "lob_v2/evidence/remediation_20261018/cold-query-batch-tests.xml",
+      "source": "/home/jiahuaiyu/develop/polymarket/repos/market-data/lob_v2/runs/remediation-20261017/cold-query-batch-tests.xml",
+      "bytes": 1090,
+      "sha256": "726c36750cba73ce5f8a602f8801acd95033994de7fa0169c9cfeef6f1aefe14"
+    },
+    {
+      "file": "lob_v2/evidence/remediation_20261018/scope-eight-markets.json",
+      "source": "/home/jiahuaiyu/develop/polymarket/repos/market-data/lob_v2/runs/remediation-20261017/scope-eight-markets.json",
+      "bytes": 5857,
+      "sha256": "2e00afa710431b656d64a2691b0af2fd899f93af884961296761fa2a7c8d29f2"
+    },
+    {
+      "file": "lob_v2/evidence/remediation_20261018/live-2x1-latest/result.json",
+      "source": "/home/jiahuaiyu/develop/polymarket/repos/market-data/lob_v2/runs/remediation-20261017/live-2x1-latest/result.json",
+      "bytes": 2103,
+      "sha256": "7abd325709332583a379592787dc697310de959707d9778e276ce9d1f801b6f3"
+    },
+    {
+      "file": "lob_v2/evidence/remediation_20261018/live-2x2-latest/result.json",
+      "source": "/home/jiahuaiyu/develop/polymarket/repos/market-data/lob_v2/runs/remediation-20261017/live-2x2-latest/result.json",
+      "bytes": 2103,
+      "sha256": "196d7872aace1db037cdd286eab1bc793aa30ef7092eb37c946d8f2c7338eb3f"
+    },
+    {
+      "file": "lob_v2/evidence/remediation_20261018/live-faults-730b27/result.json",
+      "source": "/home/jiahuaiyu/develop/polymarket/repos/market-data/lob_v2/runs/remediation-20261017/live-faults-730b27/result.json",
+      "bytes": 2230,
+      "sha256": "12e7a65b8ffee606908caf7b9638c7a64cae6fb629fc3e8faad47290600efdeb"
+    },
+    {
+      "file": "lob_v2/evidence/remediation_20261018/live-faults-730b27/faults.json",
+      "source": "/home/jiahuaiyu/develop/polymarket/repos/market-data/lob_v2/runs/remediation-20261017/live-faults-730b27/faults.json",
+      "bytes": 3206,
+      "sha256": "7ddf59039a9ee1729ecaee9c327cf5b983a9c0a16664c192d379355c4b5d9411"
+    },
+    {
+      "file": "lob_v2/evidence/remediation_20261018/live-faults-730b27/acceptance_config.json",
+      "source": "/home/jiahuaiyu/develop/polymarket/repos/market-data/lob_v2/runs/remediation-20261017/live-faults-730b27/acceptance_config.json",
+      "bytes": 2190,
+      "sha256": "df04706aa204ba4315b0bf09203bd17b58386c584731253dc48a9f7286f58036"
+    },
+    {
+      "file": "lob_v2/evidence/remediation_20261018/live-2.2.9/result.json",
+      "source": "/home/jiahuaiyu/develop/polymarket/repos/market-data/lob_v2/runs/remediation-20261017/live-2.2.9/result.json",
+      "bytes": 2091,
+      "sha256": "256d878f767d75d4c9a3eaa9df81b2527f24a042b8012c783467be3c09c2dbcf"
+    },
+    {
+      "file": "lob_v2/evidence/remediation_20261018/live-2.2.9/acceptance_config.json",
+      "source": "/home/jiahuaiyu/develop/polymarket/repos/market-data/lob_v2/runs/remediation-20261017/live-2.2.9/acceptance_config.json",
+      "bytes": 2191,
+      "sha256": "63f6e5f0430704fcb41badb94bda2e29d23a71cd030bc01e734a6e144792506d"
+    },
+    {
+      "file": "lob_v2/evidence/remediation_20261018/live-2.2.9/cross-lane-payload-reuse/projection-receipt.json",
+      "source": "/home/jiahuaiyu/develop/polymarket/repos/market-data/lob_v2/runs/remediation-20261017/live-2.2.9/cross-lane-payload-reuse/projection-receipt.json",
+      "bytes": 553,
+      "sha256": "a5806e2cac6fab00c9eed0ac3139332814c898cd8519b9e661c944ffbb50682e"
+    },
+    {
+      "file": "lob_v2/evidence/remediation_20261018/every-cut-730b27/report.json",
+      "source": "/home/jiahuaiyu/develop/polymarket/repos/market-data/lob_v2/runs/remediation-20261017/every-cut-730b27/report.json",
+      "bytes": 1553,
+      "sha256": "e4c265183bf9f0e8a770f233cd11b1b2a8804f0500b40966e61f527e8f009b2d"
+    },
+    {
+      "file": "lob_v2/evidence/remediation_20261018/fsync-5c1784/report.json",
+      "source": "/home/jiahuaiyu/develop/polymarket/repos/market-data/lob_v2/runs/remediation-20261017/fsync-5c1784/report.json",
+      "bytes": 32723,
+      "sha256": "e84d7a19a7ef0b3776b222908948242e1b64e3d31dce8e4bf92d432a8d2ace7c"
+    },
+    {
+      "file": "lob_v2/evidence/remediation_20261018/production-query-result.json",
+      "source": "/home/jiahuaiyu/develop/polymarket/repos/market-data/lob_v2/runs/remediation-20261017/production-query-result.json",
+      "bytes": 920,
+      "sha256": "f4d391d7ca42360104877309df3a5828ebc38f45a027ad59cc89043c2ba9f34e"
+    },
+    {
+      "file": "lob_v2/evidence/remediation_20261018/production-observations-result.json",
+      "source": "/home/jiahuaiyu/develop/polymarket/repos/market-data/lob_v2/runs/remediation-20261017/production-observations-result.json",
+      "bytes": 662,
+      "sha256": "2017a3fe6f7030dc45e971e93b351b36fcb0a12a3aae1623640008e5cfdd8cbd"
+    },
+    {
+      "file": "lob_v2/evidence/remediation_20261018/cross-runtime-query-readback/report.json",
+      "source": "/home/jiahuaiyu/develop/polymarket/repos/market-data/lob_v2/runs/remediation-20261017/cross-runtime-query-readback/report.json",
+      "bytes": 343,
+      "sha256": "3075e67883bc88c976628b60840657749bebc532d885ec9a072a75ad18885354"
+    },
+    {
+      "file": "lob_v2/evidence/remediation_20261018/remote-queue-census-t0.json",
+      "source": "/home/jiahuaiyu/develop/polymarket/repos/market-data/lob_v2/runs/remediation-20261017/remote-queue-census-t0.json",
+      "bytes": 516,
+      "sha256": "c827be0249fd0d7d87de53a5dcd7a18683d01e085297f7777926ea265c0a2345"
+    },
+    {
+      "file": "lob_v2/evidence/remediation_20261018/remote-queue-census-t1.json",
+      "source": "/home/jiahuaiyu/develop/polymarket/repos/market-data/lob_v2/runs/remediation-20261017/remote-queue-census-t1.json",
+      "bytes": 1092,
+      "sha256": "4ebf6c8519712d621696b6c0a912b736eae2cb61ae474372baee458f46225e6e"
+    },
+    {
+      "file": "lob_v2/evidence/remediation_20261018/remote-queue-census-t2.json",
+      "source": "/home/jiahuaiyu/develop/polymarket/repos/market-data/lob_v2/runs/remediation-20261017/remote-queue-census-t2.json",
+      "bytes": 1139,
+      "sha256": "99e04af13faed04540eac51a278ea318ffe9759cc49420af13a610af23da2f4d"
+    },
+    {
+      "file": "lob_v2/evidence/remediation_20261018/query-partition-migration-16.json",
+      "source": "/home/jiahuaiyu/develop/polymarket/repos/market-data/lob_v2/runs/remediation-20261017/query-partition-migration-16.json",
+      "bytes": 383,
+      "sha256": "6d25c2041162a5ab36bdd577bbdbc9217fe670d504a29041d97513169fb412b6"
+    },
+    {
+      "file": "lob_v2/evidence/remediation_20261018/storage-noon.json",
+      "source": "/home/jiahuaiyu/develop/polymarket/repos/market-data/lob_v2/runs/remediation-20261017/storage-noon.json",
+      "bytes": 331,
+      "sha256": "8577c239b2cba3d9fdefaad76dc0dd63cebf81bcc64d0e28851e2ecc2371457f"
+    },
+    {
+      "file": "lob_v2/evidence/remediation_20261018/storage-final.json",
+      "source": "/home/jiahuaiyu/develop/polymarket/repos/market-data/lob_v2/runs/remediation-20261017/storage-final.json",
+      "bytes": 330,
+      "sha256": "30c4a81ccecb42612fa80340a6b6aab123d401cd5c8b1c1b609d3b6677c6b2e4"
+    },
+    {
+      "file": "lob_v2/evidence/remediation_20261018/final-canary-metrics.json",
+      "source": "/home/jiahuaiyu/develop/polymarket/repos/market-data/lob_v2/runs/remediation-20261017/final-canary-metrics.json",
+      "bytes": 65690,
+      "sha256": "778ba9d7576d6b7adee3308ab39655dab8313c44c273782432984bcceecff462"
+    },
+    {
+      "file": "lob_v2/evidence/remediation_20261018/shared-credit-latency.json",
+      "source": "/home/jiahuaiyu/develop/polymarket/repos/market-data/lob_v2/runs/remediation-20261017/shared-credit-latency.json",
+      "bytes": 133,
+      "sha256": "d5f1176d7c0ce5a623814b3b10134c63d8f1fd6b456cf0f6a4a42f10e72c61cf"
+    },
+    {
+      "file": "lob_v2/evidence/remediation_20261018/shared-credit-latency-fixed.json",
+      "source": "/home/jiahuaiyu/develop/polymarket/repos/market-data/lob_v2/runs/remediation-20261017/shared-credit-latency-fixed.json",
+      "bytes": 133,
+      "sha256": "4278b9d6e2bc44f1ad6ab07f7fd6d756d81bb7674e1c302acd49ea2ae10abd9c"
+    },
+    {
+      "file": "lob_v2/evidence/remediation_20261018/route-domain-correction.json",
+      "source": "/home/jiahuaiyu/develop/polymarket/repos/market-data/lob_v2/runs/remediation-20261017/route-domain-correction.json",
+      "bytes": 389,
+      "sha256": "99dabafc74d45da3137588bfe6380d38c7ecbea8c5bbb61658c94bd35e62c859"
+    },
+    {
+      "file": "lob_v2/evidence/remediation_20261018/plant-rollout-730b27/deployment.json",
+      "source": "/home/jiahuaiyu/develop/polymarket/repos/market-data/lob_v2/runs/remediation-20261017/plant-rollout-730b27/deployment.json",
+      "bytes": 210,
+      "sha256": "ca56f3f122254f73e6f1802d5769f16a1e81577aa7843f3826e47bc5013e1583"
+    },
+    {
+      "file": "lob_v2/evidence/remediation_20261018/remote-queue-census-final.json",
+      "source": "/home/jiahuaiyu/develop/polymarket/repos/market-data/lob_v2/runs/remediation-20261017/remote-queue-census-final.json",
+      "bytes": 1327,
+      "sha256": "b7f0e9f7f88cb1a521a1a1c79838a72ad6ed65019fdf914cfd80e65005ca8eea"
+    },
+    {
+      "file": "lob_v2/evidence/remediation_20261018/soak/progress.json",
+      "source": "/home/jiahuaiyu/develop/polymarket/repos/market-data/lob_v2/runs/remediation-20261017/soak/progress.json",
+      "bytes": 568,
+      "sha256": "234557e6bfcda61602d1cab6927fd6efbf446a4e53d9f411e7edc8f3ef18c41e"
+    }
+  ],
+  "large_local_inputs": [
+    {
+      "path": "/home/jiahuaiyu/develop/polymarket/repos/market-data/lob_v2/runs/remediation-20261017/production-tape.lobseg",
+      "bytes": 5452548,
+      "sha256": "3c3bf95504c28dc7952cfe8f05e0c64fa6a1bebdcb2a5a4c581ca46504440814"
+    },
+    {
+      "path": "/home/jiahuaiyu/develop/polymarket/repos/market-data/lob_v2/runs/remediation-20261017/coverage-20261018-noon/report.json",
+      "bytes": 101902326,
+      "sha256": "b7c137c63a4850f9717d6cf4633bef1d4048061386c2742ef0f03e808f1b8e80"
+    },
+    {
+      "path": "/home/jiahuaiyu/develop/polymarket/repos/market-data/lob_v2/runs/remediation-20261017/coverage-20261018-noon/subscription_coverage.parquet",
+      "bytes": 91469049,
+      "sha256": "08616b73fd89be33b4d8ffdac22a3b176ebbddc3ce5a6bcf17a230d71d093787"
+    }
+  ],
+  "canonical_input_custody": "Production archive immutable manifest identities are retained in projection receipts; query commits never authorize capture deletion",
+  "pending_gates": [
+    "full_scope_same_catalog_revision",
+    "standby_all_lanes",
+    "50ms_p99",
+    "query_cold_drain",
+    "net_payload_custody_transfer",
+    "independent_host_DR",
+    "24h_fixed_build_cross_UTC"
+  ]
+}

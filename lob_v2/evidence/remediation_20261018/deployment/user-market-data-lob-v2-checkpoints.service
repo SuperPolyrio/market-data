@@ -1,0 +1,13 @@
+[Unit]
+Description=V2 hourly exact committed quiet-market checkpoints
+[Service]
+ExecStart=/home/jiahuaiyu/develop/polymarket/repos/market-data/.venv/bin/python /home/jiahuaiyu/develop/polymarket/repos/market-data/lob_v2/releases/730b27eaefba/tools/checkpoint_live.py --deployment /home/jiahuaiyu/develop/polymarket/repos/market-data/lob_v2/runs/production-20261017 --output /home/jiahuaiyu/develop/polymarket/repos/market-data/lob_v2/runs/remediation-20261017/live-checkpoints --watch
+Environment=PYTHONDONTWRITEBYTECODE=1
+Nice=15
+IOSchedulingClass=idle
+CPUQuota=100%
+MemoryMax=2G
+Restart=on-failure
+RestartSec=15
+[Install]
+WantedBy=default.target

@@ -1,0 +1,11 @@
+{
+  "utc_ns": 1792297195794500460,
+  "sealed_pending_bytes": 6957994323,
+  "open_journal_bytes": 17650545702,
+  "journal_bytes_committed": 3769056807061,
+  "object_bytes_committed": 409119790457,
+  "evicted_bytes": 4176639934034,
+  "receipts": 73881,
+  "oldest_sealed_seconds": 298.4133949279785,
+  "holes_before_last_commit": 0
+}
