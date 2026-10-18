@@ -356,14 +356,21 @@ def repair_lifecycle_outboxes(root):
     return repaired
 
 
+def last_journal_identity(path, *, recover=False):
+    last=None
+    for record in read_journal(path,recover=recover):
+        last={'stream':record.stream,'last_recoverable_offset':record.offset}
+    return last
+
+
 def recover_open(root):
     recovered = []
     for path in sorted(Path(root).glob("*.open")):
-        records = list(read_journal(path, recover=True))
-        target = path.with_suffix(".journal" if records else ".empty")
+        last = last_journal_identity(path,recover=True)
+        target = path.with_suffix(".journal" if last else ".empty")
         os.rename(path, target)
         sync_dir(path.parent)
-        recovered.append({"stream": records[-1].stream if records else "UNKNOWN",
-                          "last_recoverable_offset": records[-1].offset if records else 0,
+        recovered.append({"stream": last['stream'] if last else "UNKNOWN",
+                          "last_recoverable_offset": last['last_recoverable_offset'] if last else 0,
                           "path": str(target)})
     return recovered

@@ -439,3 +439,29 @@ def test_archive_process_readback_and_dependency_guard(tmp_path):
         restored=tmp_path/'recovered.lobseg';restore(store,receipt['manifest_key'],restored)
         assert [r.frame for r in read_archive(restored)]==[original]
     asyncio.run(run())
+
+
+def test_long_query_work_directory_has_bounded_private_ssh_control_socket(tmp_path):
+    from lobv2.ssh_store import control_socket
+    from pathlib import Path
+    path=control_socket(tmp_path/('long-directory-'*20),'identity',0)
+    assert len(os.fsencode(path))<108
+    assert Path(path).parent.stat().st_mode&0o077==0
+    assert path==control_socket(tmp_path/('long-directory-'*20),'identity',0)
+    assert path!=control_socket(tmp_path/('long-directory-'*20),'identity',1)
+
+
+def test_restart_identity_scan_does_not_retain_previous_tape_records(monkeypatch):
+    import weakref
+    import lobv2.journal as journal_module
+    from lobv2.wire import encode
+    live=[]
+    def records(path,recover=False):
+        for i in range(1000):
+            record=encode('TAPE','G','old-generation',i+1,{'fixture':i})
+            live.append(weakref.ref(record))
+            assert sum(r() is not None for r in live)<=2
+            yield record
+    monkeypatch.setattr(journal_module,'read_journal',records)
+    assert journal_module.last_journal_identity('unused')=={'stream':'old-generation','last_recoverable_offset':1000}
+    assert all(r() is None for r in live)

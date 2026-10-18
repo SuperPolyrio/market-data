@@ -8,7 +8,19 @@ from pathlib import Path
 import time
 import hashlib
 import tempfile
+import os
 from contextlib import contextmanager
+
+
+def control_socket(directory, identity, index):
+    path=directory/("ssh-"+identity+"-"+str(index))
+    if len(os.fsencode(path))<100:return str(path)
+    short=Path(tempfile.gettempdir())/('lobv2-ssh-'+str(os.getuid()))
+    short.mkdir(mode=0o700,exist_ok=True)
+    if short.is_symlink() or short.stat().st_uid!=os.getuid() or short.stat().st_mode&0o077:
+        raise OSError('SSH_CONTROL_DIRECTORY_NOT_PRIVATE')
+    name=hashlib.sha256(str(path).encode()).hexdigest()[:32]
+    return str(short/name)
 
 
 @contextmanager
@@ -73,7 +85,7 @@ class SSHStore:
                 source.write(data or b"")
                 source.seek(0)
                 identity=hashlib.sha256((c["host"]+c["identity_file"]).encode()).hexdigest()[:12]
-                control_path=str(directory/("ssh-"+identity+"-"+str(index)))
+                control_path=control_socket(directory,identity,index)
                 child = subprocess.Popen(["ssh", "-i", c["identity_file"], "-o", "IdentitiesOnly=yes",
                     "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes", "-o", "ConnectTimeout=10",
                     "-o", "ControlMaster=auto", "-o", "ControlPersist=120", "-o", "ControlPath="+control_path,

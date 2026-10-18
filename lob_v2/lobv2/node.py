@@ -22,7 +22,7 @@ import websockets
 from .book import digest, inspect, state_view, prepare_record
 from .catalog import shards, validate_scope
 from .core import Gateway, Plant
-from .journal import Journal, atomic_json, read_journal, recover_open, repair_lifecycle_outboxes
+from .journal import Journal, atomic_json, read_journal, recover_open, repair_lifecycle_outboxes, last_journal_identity
 from .wire import MAX_RECORD, SCHEMA_DIGEST, control, decode, encode, json_bytes, read_frame, send
 from . import __version__
 from .telemetry import queue_snapshot
@@ -603,9 +603,8 @@ async def run_node(role, node_id, config, scope, root, seconds=None):
         if not previous:
             paths = sorted((root/"journal").glob("*.journal"),key=lambda p:p.stat().st_mtime_ns)
             if paths:
-                tail = list(read_journal(paths[-1]))
-                if tail:
-                    previous = [{"stream":tail[-1].stream,"last_recoverable_offset":tail[-1].offset}]
+                last = last_journal_identity(paths[-1])
+                if last:previous = [last]
         journal.append("STREAM_RESTART", {"previous_recoverable_tapes":previous,
             "continuity": "RESET_REQUIRED", "client_received_position": "UNKNOWN"})
     owner.runtime_config = config
