@@ -52,22 +52,28 @@ def mirror(path,db):
     with lease(key):
         if not path.exists():return
         encoded=path.read_bytes();manifest=json.loads(encoded)
-    data_key=manifest['data_key']
-    with lease(data_key):
-        source=path_for(HOT,data_key)
-        if not source.exists():source=path_for(COLD,data_key)
-        if source.stat().st_size!=manifest['object_bytes'] or sha(source)!=manifest['object_sha256']:
-            raise ValueError('HOT_OBJECT_CHECKSUM_MISMATCH_KEEP_ALL_COPIES')
-        put_immutable(COLD,data_key,source.read_bytes())
-    if sha(path_for(COLD,data_key))!=manifest['object_sha256']:
-        raise ValueError('COLD_OBJECT_READBACK_MISMATCH')
+    query=key.startswith('query/commits/')
+    files=manifest['files'] if query else [{'key':manifest['data_key'],'bytes':manifest['object_bytes'],'sha256':manifest['object_sha256']}]
+    for row in files:
+        data_key=row['key']
+        with lease(data_key):
+            source=path_for(HOT,data_key)
+            if not source.exists():source=path_for(COLD,data_key)
+            if source.stat().st_size!=row['bytes'] or sha(source)!=row['sha256']:
+                raise ValueError('HOT_OBJECT_CHECKSUM_MISMATCH_KEEP_ALL_COPIES')
+            put_immutable(COLD,data_key,source.read_bytes())
+        if sha(path_for(COLD,data_key))!=row['sha256']:
+            raise ValueError('COLD_OBJECT_READBACK_MISMATCH')
     put_immutable(COLD,key,encoded)
     if path_for(COLD,key).read_bytes()!=encoded:raise ValueError('COLD_MANIFEST_READBACK_MISMATCH')
-    db.execute('insert or ignore into commits values(?,?,?,?,?,?,?)',(key,manifest['producer'],manifest['stream'],manifest['first'],manifest['last'],manifest['count'],manifest['object_bytes']))
+    if query:
+        db.execute('CREATE TABLE IF NOT EXISTS query_commits(key TEXT PRIMARY KEY,manifest TEXT,bytes INTEGER)')
+        db.execute('INSERT OR IGNORE INTO query_commits VALUES (?,?,?)',(key,encoded.decode(),sum(row['bytes'] for row in files)))
+    else:db.execute('insert or ignore into commits values(?,?,?,?,?,?,?)',(key,manifest['producer'],manifest['stream'],manifest['first'],manifest['last'],manifest['count'],manifest['object_bytes']))
     db.commit()
     # Cold commit is already durable. Acquire exclusive leases only for releasing
     # individual HOT files, so HDD writes cannot stall producer readback.
-    for local_key in (data_key,key):
+    for local_key in [row['key'] for row in files]+[key]:
         with lease(local_key,True) as lock_path:
             local=path_for(HOT,local_key)
             if local.exists():local.unlink();sync(local.parent)
@@ -80,6 +86,7 @@ def main():
     db=sqlite3.connect(HOT/'cold-progress.sqlite')
     db.execute('pragma journal_mode=WAL');db.execute('pragma synchronous=FULL')
     db.execute('create table if not exists commits(key text primary key,producer text,stream text,first_offset integer,last_offset integer,records integer,bytes integer)')
+    db.execute('CREATE TABLE IF NOT EXISTS query_commits(key TEXT PRIMARY KEY,manifest TEXT,bytes INTEGER)')
     # Existing manifests were independently verified by the original direct-HDD
     # publisher. Import their immutable commit evidence into the tier index.
     if not db.execute('select count(*) from commits').fetchone()[0]:
@@ -89,7 +96,8 @@ def main():
     while not STOP:
         paths=sorted((HOT/'commits').rglob('*.json'),key=lambda p:p.stat().st_mtime_ns)
         error=None
-        for path in paths[:32]:
+        query_paths=sorted((HOT/'query/commits').rglob('*.json'),key=lambda p:p.stat().st_mtime_ns)
+        for path in paths[:32]+query_paths[:2]:
             if STOP:break
             try:mirror(path,db)
             except Exception as exc:error={'error':repr(exc),'path':str(path),'utc_ns':time.time_ns()};atomic(HOT/'mirror-error.json',error)
@@ -98,6 +106,9 @@ def main():
         atomic(HOT/'cold-progress.json',{'utc_ns':time.time_ns(),'tier':'HDD_VERIFIED_IMMUTABLE_COMMIT',
             'cold_manifests':db.execute('select count(*) from commits').fetchone()[0],
             'cold_object_bytes':db.execute('select coalesce(sum(bytes),0) from commits').fetchone()[0],
+            'query_cold_manifests':db.execute('SELECT COUNT(*) FROM query_commits').fetchone()[0],
+            'query_cold_bytes':db.execute('SELECT COALESCE(SUM(bytes),0) FROM query_commits').fetchone()[0],
+            'query_hot_commits_pending_cold':len(list((HOT/'query/commits').rglob('*.json'))),
             'hot_commits_pending_cold':len(pending),'oldest_hot_commit_seconds':max((time.time()-p.stat().st_mtime for p in pending),default=0),
             'nvme_available_bytes':stat.f_bavail*stat.f_frsize,'nvme_available_inodes':stat.f_favail,
             'nvme_reserved_bytes':2*1024**4,'last_pass_error':error,'streams':progress(db)})

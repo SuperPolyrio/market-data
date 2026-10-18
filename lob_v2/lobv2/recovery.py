@@ -62,7 +62,9 @@ class RecoveryBudget:
         provider_limit=config.get("initial_sessions_per_provider",8) if initial else config.get("recovery_sessions_per_provider",2)
         host_limit=min(host_limit,max(1,config.get("initializing_tokens_per_host",32000)//per_socket))
         domain=hashlib.sha256(str(provider).encode()).hexdigest()[:12]
-        self.domains=[(base/"host",host_limit),(base/("plant-"+producer.split("-")[0]),plant_limit),(base/("provider-"+domain),provider_limit)]
+        worker_limit=config.get('initial_sessions_per_worker',2) if initial else config.get('recovery_sessions_per_worker',1)
+        self.domains=[(base/"host",host_limit),(base/("plant-"+producer.split("-")[0]),plant_limit),
+            (base/('worker-'+producer),worker_limit),(base/("provider-"+domain),provider_limit)]
         self.locks=[]
         self.tokens=tokens
 

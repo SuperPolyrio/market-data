@@ -191,7 +191,9 @@ class Owner:
         subscription = Subscription(markets, ByteQueue(max_bytes))
         self.subscribers.add(subscription)
         return {"snapshot_id": str(uuid.uuid4()), "kind": "CURRENT_SNAPSHOT",
-                "stream": self.journal.stream, "items": items}, subscription
+                "stream": self.journal.stream, "items": items,
+                'generated_utc_ns':time.time_ns(),'catalog_revision':self.catalog_revision,
+                'expected_markets':len(markets),'owner_record_cut':self.journal.applied_offset}, subscription
 
     def _committed_epoch(self, market):
         return self._committed_meta.get(market, {}).get("book_epoch", 0)
