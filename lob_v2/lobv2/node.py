@@ -119,6 +119,46 @@ async def confirm_snapshot(reader,writer,snapshot,session):
         raise ValueError("BOOTSTRAP_CANCELLED")
 
 
+async def decode_snapshot(data):
+    """Yield only between complete markets while decoding a large bootstrap."""
+    text=data.decode();decoder=json.JSONDecoder();size=len(text);index=0;result={}
+    def whitespace(position):
+        while position<size and text[position] in ' \r\n\t':position+=1
+        return position
+    index=whitespace(index)
+    if index>=size or text[index]!='{':raise ValueError('INVALID_SNAPSHOT_OBJECT')
+    index=whitespace(index+1);started=time.monotonic_ns()
+    while index<size and text[index]!='}':
+        key,index=decoder.raw_decode(text,index)
+        if not isinstance(key,str) or key in result:raise ValueError('DUPLICATE_SNAPSHOT_FIELD')
+        index=whitespace(index)
+        if index>=size or text[index]!=':':raise ValueError('INVALID_SNAPSHOT_FIELD')
+        index=whitespace(index+1)
+        if key=='items':
+            if index>=size or text[index]!='[':raise ValueError('INVALID_SNAPSHOT_ITEMS')
+            items=[];index=whitespace(index+1)
+            while index<size and text[index]!=']':
+                item,index=decoder.raw_decode(text,index)
+                if not isinstance(item,dict):raise ValueError('INVALID_SNAPSHOT_MARKET')
+                items.append(item);index=whitespace(index)
+                if time.monotonic_ns()-started>=2_000_000:
+                    await asyncio.sleep(0);started=time.monotonic_ns()
+                if index<size and text[index]==',':
+                    index=whitespace(index+1)
+                    if index>=size or text[index]==']':raise ValueError('TRAILING_SNAPSHOT_COMMA')
+                else:break
+            if index>=size or text[index]!=']':raise ValueError('INCOMPLETE_SNAPSHOT_ITEMS')
+            result[key]=items;index+=1
+        else:result[key],index=decoder.raw_decode(text,index)
+        index=whitespace(index)
+        if index<size and text[index]==',':
+            index=whitespace(index+1)
+            if index>=size or text[index]=='}':raise ValueError('TRAILING_SNAPSHOT_COMMA')
+        else:break
+    if index>=size or text[index]!='}' or whitespace(index+1)!=size:raise ValueError('INCOMPLETE_SNAPSHOT_OBJECT')
+    return result
+
+
 async def receive_snapshot(reader):
     begin = decode(await asyncio.wait_for(read_frame(reader), 30))
     header = begin.body
@@ -135,7 +175,7 @@ async def receive_snapshot(reader):
     end = decode(await asyncio.wait_for(read_frame(reader), 30))
     if end.kind != "BOOTSTRAP_END" or end.body != header or len(data) != header["bytes"] or hashlib.sha256(data).hexdigest() != header["sha256"]:
         raise ValueError("BOOTSTRAP_DIGEST")
-    snapshot = json.loads(data)
+    snapshot = await decode_snapshot(data)
     if snapshot["snapshot_id"] != header["snapshot_id"]:
         raise ValueError("SNAPSHOT_ID_MISMATCH")
     return snapshot, header["session"]
@@ -162,6 +202,7 @@ async def serve(owner, config, stop):
                 snapshot, subscription = owner.bootstrap(hello.body.get("markets"), config["queue_bytes"],deferred=True)
                 subscription['follow_scope']=bool(hello.body.get('follow_scope')) and hello.body.get('markets') is None
                 await asyncio.wait_for(transmit_snapshot(writer, reader, snapshot, session,subscription["queue"]), 30)
+                del snapshot  # Release frozen ladders after the cut+1 handoff.
             while not stop.is_set():
                 if subscription["queue"].failed:
                     raise BufferError("RESYNC_REQUIRED")
@@ -311,6 +352,7 @@ async def plant_session(gateway, plant, config, stop):
             gateway.start_session(plant, session)
             await await_catalog_members(gateway,[item['market'] for item in snapshot['items']])
             await gateway.snapshot_async(plant,session,snapshot)
+            del snapshot  # A live session must not pin its initial wire ladders.
             batch_records=0
             while not stop.is_set():
                 rec = decode(await asyncio.wait_for(read_frame(reader), 30))

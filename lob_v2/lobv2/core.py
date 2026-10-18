@@ -162,7 +162,10 @@ class Owner:
         rec.trace["committed_apply_start"] = time.monotonic_ns()
         self.committed[market] = apply(self.committed.get(market, {}), body, rec.prepared)
         self.committed_seq[market] = body["market_seq"]
-        self._committed_meta[market] = body
+        # Full assets/changes already live in the exact committed book and the
+        # immutable encoded frame. Keeping wire ladders here duplicates millions
+        # of GC-tracked level arrays across quiet markets.
+        self._committed_meta[market] = {k:v for k,v in body.items() if k not in ('assets','changes')}
         self.latencies_ms.append((time.monotonic_ns()-body["decision_mono_ns"])/1e6)
         rec.trace["committed_apply_end"] = time.monotonic_ns()
         for subscription in tuple(self.subscribers):
@@ -614,8 +617,6 @@ class Plant(Owner):
                 if old is not None and self.selected.get(key[0])==old and old!=key:
                     self.select(key[0],reason="CANDIDATE_ADMITTED")
                 self.dirty_transports.add(key[1:])
-        if rec.kind == "PLANT_EMIT":
-            self._committed_meta[rec.body["market"]] = rec.body
         if rec.kind == "RAW":self.release_baselines(rec.offset)
 
     def release_baselines(self,cut):
@@ -647,8 +648,6 @@ class Gateway(Owner):
 
     def on_durable(self, rec):
         super().on_durable(rec)
-        if rec.kind == "TAPE":
-            self._committed_meta[rec.body["market"]] = rec.body
 
     def start_session(self, plant, session):
         self.drop_session(plant, self.sessions.get(plant), "PLANT_SESSION_REBUILT")

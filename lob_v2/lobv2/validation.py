@@ -338,16 +338,17 @@ class FaultRelay:
             finally:
                 for child in copies:child.cancel()
                 await asyncio.gather(*copies,return_exceptions=True)
-                writer.close()
-                if peer:peer.close()
+                writer.transport.abort()
+                if peer:peer.transport.abort()
                 self.tasks.discard(task)
         self.server=await asyncio.start_server(connected,'127.0.0.1',self.port)
 
     async def close(self):
-        self.server.close();await self.server.wait_closed()
+        self.server.close()
         pending=list(self.tasks)
         for task in pending:task.cancel()
         await asyncio.gather(*pending,return_exceptions=True)
+        await self.server.wait_closed()
 
 
 async def live_acceptance(args):

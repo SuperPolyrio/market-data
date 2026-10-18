@@ -342,3 +342,36 @@ def test_retired_source_pending_baseline_durability_cannot_crash_or_reinstall(tm
         assert p.journal.metrics.counters['retired_baseline_receipt_ignored']==2
         await p.journal.close()
     asyncio.run(run())
+
+
+def test_large_bootstrap_decode_yields_between_complete_markets():
+    import json
+    from lobv2.node import decode_snapshot
+    async def run():
+        expected={'snapshot_id':'s','items':[{'market':str(i),'assets':{'1':{'bids':[['.5','1']]*100,'asks':[]}}} for i in range(2000)],'stream':'g'}
+        raw=json.dumps(expected).encode();ticks=0;stop=False
+        async def ticker():
+            nonlocal ticks
+            while not stop:ticks+=1;await asyncio.sleep(0)
+        task=asyncio.create_task(ticker());actual=await decode_snapshot(raw);stop=True;await task
+        assert actual==expected and ticks>2
+        for bad in [b'{"items":[{},]}',b'{"items":[],}',b'{"items":[],"items":[]}',b'{"items":[{}]']:
+            with pytest.raises(ValueError):await decode_snapshot(bad)
+    asyncio.run(run())
+
+
+def test_fault_relay_closes_active_connection_before_waiting_for_server_shutdown():
+    from lobv2.validation import FaultRelay
+    async def run():
+        async def echo(reader,writer):
+            try:
+                while data:=await reader.read(100):writer.write(data);await writer.drain()
+            finally:writer.close()
+        server=await asyncio.start_server(echo,'127.0.0.1',0)
+        relay=FaultRelay(('127.0.0.1',server.sockets[0].getsockname()[1]));await relay.start()
+        reader,writer=await asyncio.open_connection('127.0.0.1',relay.port)
+        writer.write(b'fixture');await writer.drain();assert await reader.readexactly(7)==b'fixture'
+        await asyncio.wait_for(relay.close(),1)
+        assert await asyncio.wait_for(reader.read(1),1)==b''
+        writer.close();await writer.wait_closed();server.close();await server.wait_closed()
+    asyncio.run(run())
