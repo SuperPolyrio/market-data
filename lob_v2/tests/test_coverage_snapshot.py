@@ -64,6 +64,14 @@ def test_ready_with_reason_cannot_pass_and_old_cut_is_not_current():
     assert {'OUTSIDE_CAPTURE_WINDOW','CATALOG_REVISION_MISMATCH','COMMIT_CUT_ORDER_INVALID'}<=set(errors)
 
 
+def test_pending_new_baseline_is_distinct_from_false_durability_claim():
+    s=state();s['baseline_ref']['capture_offset']=21
+    assert row(s)['primary_reason']=='BASELINE_DURABILITY_EVIDENCE_INVALID'
+    s.update(baseline_durable=False,baseline_capture_durable_ref=None,ready=False,status='BASELINE_PENDING_DURABLE')
+    assert row(s)['primary_reason']=='CAPTURE_PENDING_DURABLE'
+    assert 'READY_EVIDENCE_CONTRADICTION' not in row(s)['all_reasons']
+
+
 def test_gateway_working_selection_cannot_replace_committed_source():
     async def run():
         p=make_plant(Path(__import__('tempfile').mkdtemp()))
@@ -102,7 +110,7 @@ def test_full_reconciliation_is_reproducible_and_keeps_unassigned(tmp_path):
     run={**RUN,'coverage_run_id':'fixture','membership_digest':digest,'cut_contract':'ONE_COMMITTED_CATALOG_WITH_EXPLICIT_PROCESS_LOCAL_CUTS','inputs':{}}
     inputs={'catalog-snapshot.json':catalog,'deployment.json':{'cohorts':[{'id':'0000'}],
         'ownership':{'m':{'cohort':'0000','assets':['1','2'],'version':'1'}}},
-        'universe.json':{'markets':members},'scopes/0000.json':{'markets':[M]},
+        'universe.json':{'markets':members,'unresolved':[{'id':'unknown','reason':'UNRESOLVED_BINARY_IDENTITY'}]},'scopes/0000.json':{'markets':[M]},
         'controls/0000.json':{'catalog_revision':8,'cohort_scope_digest':hashlib.sha256(json_bytes([M])).hexdigest()}}
     for name,data in inputs.items():audit.preserve(tmp_path,name,json_bytes(data),run['inputs'])
     (tmp_path/'coverage_run.json').write_text(json.dumps(run))
@@ -110,6 +118,7 @@ def test_full_reconciliation_is_reproducible_and_keeps_unassigned(tmp_path):
     assert first['desired_tokens']==4 and first['token_lane_rows']==16
     assert first['active_route_unique_tokens_by_stage']['assigned']==2
     assert first['gates']['denominator_rows_complete']=='PASS'
+    assert first['gates']['discovery_identity_resolution']=='FAIL'
     assert first['gates']['all_desired_assigned']=='FAIL' and first['acceptance']=='FAIL'
     table=pq.read_table(tmp_path/'token_state_at_cut.parquet').to_pylist()
     assert len([r for r in table if r['market']=='unassigned'])==8

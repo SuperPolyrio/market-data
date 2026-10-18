@@ -194,7 +194,9 @@ def token_row(market, token, role, lane, cohort, assigned, status, states, dupli
                  offset <= status.get('applied_offset',-1) <= status.get('durable_offset',-1))
     if current and not written:errors.append('SUBSCRIPTION_WRITE_EVIDENCE_MISSING')
     if current and not book:errors.append('CURRENT_NATIVE_BASELINE_MISSING')
-    if book and not durable:errors.append('BASELINE_DURABILITY_EVIDENCE_INVALID')
+    if book and not durable:
+        pending=not state.get('baseline_durable') and offset is not None and offset>status.get('applied_offset',-1)
+        errors.append('CAPTURE_PENDING_DURABLE' if pending else 'BASELINE_DURABILITY_EVIDENCE_INVALID')
     errors.extend(state.get('eligibility_reasons',[]))
     if state and not state.get('ready'):errors.append(state.get('status','NOT_READY'))
     if state.get('ready') and not (written and book and durable):errors.append('READY_EVIDENCE_CONTRADICTION')
@@ -387,6 +389,7 @@ def reconcile(output):
         'retired_assignments_explained':catalog_counts.get('ASSIGNED_NOT_DESIRED_UNEXPLAINED',0)==0,
         'same_revision_fresh_exact_node_cuts':not bad_nodes,
         'gateway_parent_prefixes_closed':market_counts['gateway_parent_prefix_failures']==0,
+        'discovery_identity_resolution':not catalog.get('pending_validation') and not census.get('unresolved') and not unadmitted,
         'all_desired_have_complete_source':market_counts['any_complete_source']==len(desired),
         'all_desired_both_plants':market_counts['both_plants']==len(desired),
         'all_desired_four_lanes':market_counts['all_four_lanes']==len(desired),
