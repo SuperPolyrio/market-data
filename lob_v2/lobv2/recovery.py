@@ -7,7 +7,7 @@ import time
 
 
 class TextProbe:
-    """An ambiguous fixed-string PONG never authorizes a subsequent probe.
+    """A late unique response fails its own probe; overlap is ambiguous.
 
     Mandatory keepalive PINGs continue after ambiguity, without pretending they
     are distinguishable probes. Only a new session can clear that ambiguity.
@@ -22,7 +22,6 @@ class TextProbe:
 
     def expire(self, now):
         if self.pending and now-self.pending["enqueued"]>self.deadline_ns:
-            self.ambiguous=True
             self.consecutive=0
             return True
         return self.ambiguous
@@ -32,6 +31,9 @@ class TextProbe:
         if not self.ambiguous and self.pending is None:
             self.pending={"enqueued":now,"write_completed":None}
             return True
+        # The caller still sends the mandatory keepalive. If an older response
+        # is outstanding, subsequent fixed-string PONGs cannot be correlated.
+        self.ambiguous=True
         return False
 
     def written(self, now):
@@ -45,10 +47,11 @@ class TextProbe:
             return None
         probe=self.pending
         self.pending=None
-        self.consecutive+=1
+        late=now-probe['enqueued']>self.deadline_ns
+        self.consecutive=0 if late else self.consecutive+1
         return {"enqueued":probe["enqueued"],"write_completed":probe["write_completed"],
                 "observed":now,"rtt_ms":(now-probe["enqueued"])/1e6,
-                "healthy":self.consecutive>=self.required,"consecutive":self.consecutive}
+                "healthy":self.consecutive>=self.required,"consecutive":self.consecutive,"late":late}
 
 
 class RecoveryBudget:
@@ -57,14 +60,26 @@ class RecoveryBudget:
         base=Path(config.get("recovery_lock_root",Path(config.get("connection_rate_file","/tmp/lob-v2-connections")).parent/"recovery-budget"))
         # Slots conservatively reserve a full socket of token/snapshot capacity.
         per_socket=max(2,config.get("assets_per_connection",2000))
-        host_limit=config.get("initial_sessions_per_host",16) if initial else config.get("recovery_sessions_per_host",4)
-        plant_limit=config.get("initial_sessions_per_plant",8) if initial else config.get("recovery_sessions_per_plant",2)
-        provider_limit=config.get("initial_sessions_per_provider",8) if initial else config.get("recovery_sessions_per_provider",2)
-        host_limit=min(host_limit,max(1,config.get("initializing_tokens_per_host",32000)//per_socket))
         domain=hashlib.sha256(str(provider).encode()).hexdigest()[:12]
-        worker_limit=config.get('initial_sessions_per_worker',2) if initial else config.get('recovery_sessions_per_worker',1)
-        self.domains=[(base/"host",host_limit),(base/("plant-"+producer.split("-")[0]),plant_limit),
-            (base/('worker-'+producer),worker_limit),(base/("provider-"+domain),provider_limit)]
+        # All modes see the same shared slots. A smaller recovery quota must not
+        # mean only slots [0,4) in a 16-slot pool: initial work may hold those four
+        # while other slots are free. Separate quotas bound each mode instead.
+        mode='initial' if initial else 'recovery'
+        self.domains=[]
+        shared=[]
+        for kind,label,initial_default,recovery_default in (
+                ('host','host',16,4),('plant','plant-'+producer.split('-')[0],8,2),
+                ('worker','worker-'+producer,2,1),('provider','provider-'+domain,8,2)):
+            initial_limit=config.get('initial_sessions_per_'+kind,initial_default)
+            recovery_limit=config.get('recovery_sessions_per_'+kind,recovery_default)
+            total=max(initial_limit,recovery_limit)
+            limit=initial_limit if initial else recovery_limit
+            if kind=='host':
+                token_limit=max(1,config.get('initializing_tokens_per_host',32000)//per_socket)
+                total=min(total,token_limit);limit=min(limit,token_limit)
+            self.domains.append((base/(mode+'-'+label),limit))
+            shared.append((base/label,total))
+        self.domains.extend(shared)
         self.locks=[]
         self.tokens=tokens
 

@@ -136,6 +136,7 @@ class Session:
                     raw_ref={"capture_run":rec.stream,"capture_offset":rec.offset,"connection":self.connection,"recv_seq":item.sequence},
                     reason="PONG" if proof["healthy"] else "WAIT_STABLE_PROBES")
                 self.plant.journal.metrics.observe("text_ping_to_recv",proof["rtt_ms"])
+                if proof.get('late'):self.plant.journal.metrics.counters['late_unique_text_pong']+=1
             else:
                 self.plant.journal.metrics.counters["unmatched_or_ambiguous_text_pong"]+=1
 

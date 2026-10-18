@@ -487,3 +487,58 @@ def test_candidate_timeout_cancels_rate_wait_and_releases_initialization_budget(
         assert not plant.books and not plant.connections
         await journal.close()
     asyncio.run(run())
+
+
+def test_recovery_quota_does_not_pin_recovery_to_occupied_initial_slots(tmp_path):
+    from lobv2.recovery import RecoveryBudget
+    config={'recovery_lock_root':str(tmp_path),'initial_sessions_per_host':4,'recovery_sessions_per_host':1,
+        'initial_sessions_per_plant':4,'recovery_sessions_per_plant':1,
+        'initial_sessions_per_provider':4,'recovery_sessions_per_provider':1}
+    first=RecoveryBudget(config,'P-0001','provider',initial=True)
+    recovering=RecoveryBudget(config,'Q-0002','provider',initial=False)
+    another=RecoveryBudget(config,'Q-0003','provider',initial=False)
+    assert first.try_acquire()
+    assert recovering.try_acquire()
+    assert not another.try_acquire()
+    recovering.release()
+    assert another.try_acquire()
+    first.release();another.release()
+
+
+def test_initial_and_recovery_still_share_the_total_token_budget(tmp_path):
+    from lobv2.recovery import RecoveryBudget
+    config={'recovery_lock_root':str(tmp_path),'initial_sessions_per_host':2,'recovery_sessions_per_host':2,
+        'assets_per_connection':2000,'initializing_tokens_per_host':4000}
+    a=RecoveryBudget(config,'P-0001','A',initial=True)
+    b=RecoveryBudget(config,'Q-0002','B',initial=False)
+    c=RecoveryBudget(config,'P-0003','C',initial=True)
+    assert a.try_acquire() and b.try_acquire()
+    assert not c.try_acquire()
+    b.release();assert c.try_acquire()
+    a.release();c.release()
+
+
+def test_late_unique_pong_fails_old_probe_then_requires_three_new_good_probes():
+    from lobv2.recovery import TextProbe
+    probe=TextProbe(2,3)
+    assert probe.begin(10_000_000)
+    probe.written(10_100_000)
+    late=probe.observe(13_000_000)
+    assert late['late'] and not late['healthy'] and late['consecutive']==0
+    assert not probe.ambiguous and probe.pending is None
+    for i in range(3):
+        now=20_000_000+i*10_000_000
+        assert probe.begin(now)
+        probe.written(now+100_000)
+        proof=probe.observe(now+200_000)
+        assert proof['healthy']==(i==2)
+
+
+def test_overlapping_keepalive_keeps_late_pong_ambiguous():
+    from lobv2.recovery import TextProbe
+    probe=TextProbe(2,3)
+    probe.begin(10_000_000);probe.written(10_100_000)
+    assert probe.expire(13_000_000)
+    assert not probe.begin(20_000_000)  # A second PING is sent before old PONG.
+    assert probe.observe(20_200_000) is None and probe.ambiguous
+    assert not probe.begin(30_000_000) and probe.observe(30_200_000) is None

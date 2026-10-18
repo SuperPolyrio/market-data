@@ -405,6 +405,7 @@ def status(owner):
     usage = resource.getrusage(resource.RUSAGE_SELF)
     result = {"producer": owner.journal.producer, "stream": owner.journal.stream,
         "catalog_revision":owner.catalog_revision,"scope_policy_version":owner.scope_policy_version,
+        "catalog_apply_pending":owner.catalog_apply_pending,
         "blocked_markets":dict(owner.blocked_markets),"provenance":owner.provenance,
         "utc_ns": time.time_ns(), "mono_ns": time.monotonic_ns(),
         "journal_offset": owner.journal.offset, "durable_offset": owner.journal.durable_offset,
@@ -417,6 +418,10 @@ def status(owner):
         "max_sync_batch_records": owner.journal.max_sync_batch, "failure": owner.journal.failure,
         "emits": owner.emits, "nonselected_groups": owner.nonselected, "resets": owner.resets,
         "committed_seq": dict(owner.committed_seq),
+        "committed_sources": {m:{k:v for k,v in meta.items() if k in (
+            "market_seq","book_epoch","route","scope_revision","scope_assets","market_version",
+            "plant_market_seq","plant_cut","source_plant_record","kind","quality")}
+            for m,meta in owner._committed_meta.items()},
         "committed_digest": {m:digest(s) for m,s in owner.committed.items()} if owner.runtime_config.get("metrics_digests",True) else {},
         "books": {m:inspect(s) for m,s in owner.committed.items()},
         "selected": {m:list(s) if isinstance(s,tuple) else s for m,s in owner.selected.items()},

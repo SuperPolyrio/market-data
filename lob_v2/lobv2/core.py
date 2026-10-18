@@ -66,6 +66,7 @@ class Owner:
         self.latencies_ms = deque(maxlen=65536)
         self.provenance = {}
         self.catalog_revision=0
+        self.catalog_apply_pending=False
         self.scope_policy_version=None
         self.blocked_markets={}
         self.journal.callbacks.append(self.on_durable)
@@ -127,6 +128,7 @@ class Owner:
         blocked={m['market']:m for m in control['blocked'] if m['market'] in self.scope}
         if revision==self.catalog_revision and blocked==self.blocked_markets and not added:return
         previous=self.blocked_markets
+        self.catalog_apply_pending=True
         self.catalog_revision=revision
         self.scope_policy_version=control['scope_policy_version']
         self.blocked_markets=blocked
@@ -152,6 +154,7 @@ class Owner:
                 for key in self.market_keys.get(market,()):self.reconcile(key)
             if time.monotonic_ns()-started>2_000_000:
                 await asyncio.sleep(0);started=time.monotonic_ns()
+        self.catalog_apply_pending=False
 
     def on_durable(self, rec):
         if rec.kind != self.record_kind:
