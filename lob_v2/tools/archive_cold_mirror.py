@@ -97,7 +97,7 @@ def main():
         paths=sorted((HOT/'commits').rglob('*.json'),key=lambda p:p.stat().st_mtime_ns)
         error=None
         query_paths=sorted((HOT/'query/commits').rglob('*.json'),key=lambda p:p.stat().st_mtime_ns)
-        for path in paths[:32]+query_paths[:2]:
+        for path in paths[:32]+query_paths[:8]:
             if STOP:break
             try:mirror(path,db)
             except Exception as exc:error={'error':repr(exc),'path':str(path),'utc_ns':time.time_ns()};atomic(HOT/'mirror-error.json',error)
@@ -109,10 +109,11 @@ def main():
             'query_cold_manifests':db.execute('SELECT COUNT(*) FROM query_commits').fetchone()[0],
             'query_cold_bytes':db.execute('SELECT COALESCE(SUM(bytes),0) FROM query_commits').fetchone()[0],
             'query_hot_commits_pending_cold':len(list((HOT/'query/commits').rglob('*.json'))),
+            'query_oldest_hot_seconds':max((time.time()-p.stat().st_mtime for p in (HOT/'query/commits').rglob('*.json')),default=0),
             'hot_commits_pending_cold':len(pending),'oldest_hot_commit_seconds':max((time.time()-p.stat().st_mtime for p in pending),default=0),
             'nvme_available_bytes':stat.f_bavail*stat.f_frsize,'nvme_available_inodes':stat.f_favail,
             'nvme_reserved_bytes':2*1024**4,'last_pass_error':error,'streams':progress(db)})
-        time.sleep(.1 if len(paths)>=32 else 2)
+        time.sleep(.1 if len(paths)>=32 or len(query_paths)>=8 else 2)
     db.close()
 
 
