@@ -242,7 +242,7 @@ async def session_manager(plant,logical,lane,markets,config,stop):
             grace=not sessions or min(now-s.started for s in sessions)>config.get("backlog_reconnect_grace_seconds",60)
             if missing and not initializing and not local and grace and now>=next_attempt and len(sessions)<config.get("max_sessions_per_logical_lane",8):
                 lease=RecoveryBudget(config,role,provider,initial=not sessions,tokens=2*len(missing))
-                if lease.try_acquire():
+                if await lease.acquire_async():
                     epoch+=1
                     physical=logical+(epoch-1)*1_000_000
                     session=Session(plant,logical,physical,lane,epoch,missing,config,stop,lease)
@@ -250,9 +250,11 @@ async def session_manager(plant,logical,lane,markets,config,stop):
                     sessions.append(session)
                     plant.journal.append("RECOVERY_START",{"logical_shard":logical,"physical_shard":physical,"lane":lane,
                         "connection":session.connection,"markets":len(missing),"attempt":failures,
-                        "reason":"INITIAL_SUBSCRIPTION" if epoch==1 else "UNKNOWN_INGRESS_LAG"})
+                        "reason":"INITIAL_SUBSCRIPTION" if epoch==1 else "UNKNOWN_INGRESS_LAG",
+                        'causes':[{'shard':s.shard,'reason':classify(plant,s.shard,lane)} for s in sessions if s is not session]})
                 else:
                     plant.journal.metrics.counters["recovery_budget_wait"]+=1
+                    next_attempt=now+random.uniform(.5,1.5)
             # A connection is retired only after ALL its market responsibilities
             # move, including the durable RESET boundary for a published route.
             for session in sessions:

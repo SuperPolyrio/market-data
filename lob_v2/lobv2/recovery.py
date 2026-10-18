@@ -90,6 +90,14 @@ class RecoveryBudget:
         for file in self.locks:file.close()
         self.locks=[]
 
+    async def acquire_async(self):
+        task=asyncio.create_task(asyncio.to_thread(self.try_acquire))
+        try:return await asyncio.shield(task)
+        except asyncio.CancelledError:
+            await task
+            self.release()
+            raise
+
 
 def classify(plant, shard, lane):
     local=plant.local_issue(shard,lane)

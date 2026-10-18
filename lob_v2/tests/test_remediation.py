@@ -308,3 +308,21 @@ def test_lifecycle_outbox_has_original_durable_capture_identity(tmp_path):
         assert next(r for r in records if r.kind=='RAW').raw==raw
         assert next(r for r in records if r.kind=='LIFECYCLE_CAPTURED').body['raw_ref']['capture_offset']==rec.offset
     asyncio.run(run())
+
+
+def test_contended_connection_credit_does_not_block_reader_event_loop(tmp_path):
+    import fcntl
+    from lobv2.node import connection_credit
+    path=tmp_path/'credit';held=threading.Event()
+    def holder():
+        with path.open('a+') as f:
+            fcntl.flock(f.fileno(),fcntl.LOCK_EX);held.set();time.sleep(.25)
+    thread=threading.Thread(target=holder);thread.start();held.wait()
+    async def run():
+        task=asyncio.create_task(connection_credit({'connection_rate_file':str(path),'connections_per_second':10}))
+        ticks=0
+        while not task.done():
+            ticks+=1;await asyncio.sleep(.005)
+        await task
+        assert ticks>=20
+    asyncio.run(run());thread.join()

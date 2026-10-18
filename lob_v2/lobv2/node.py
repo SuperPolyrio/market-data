@@ -38,9 +38,10 @@ async def connection_credit(config):
     path = Path(path)
     path.parent.mkdir(parents=True,exist_ok=True)
     interval = 1/config.get("connections_per_second",10)
-    while True:
+    def reserve():
         with path.open("a+") as file:
-            fcntl.flock(file.fileno(),fcntl.LOCK_EX)
+            try:fcntl.flock(file.fileno(),fcntl.LOCK_EX|fcntl.LOCK_NB)
+            except BlockingIOError:return random.uniform(.01,.05)
             file.seek(0)
             prior = float(file.read() or "0")
             now = time.monotonic()
@@ -51,10 +52,14 @@ async def connection_credit(config):
                 file.truncate()
                 file.write(str(now+interval))
                 file.flush()
-                return
+                return 0
+            return max(.001,prior-now)+random.uniform(0,.1*interval)
+    while True:
+        delay=await asyncio.to_thread(reserve)
+        if not delay:return
         # Reserve only the slot actually used. Cancelled connection tasks cannot
         # leave minutes of phantom reservations behind a plant restart.
-        await asyncio.sleep(max(.001,prior-now)+random.uniform(0,.1*interval))
+        await asyncio.sleep(delay)
 
 
 def tls_context(config, server=False):
