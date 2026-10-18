@@ -465,3 +465,25 @@ def test_restart_identity_scan_does_not_retain_previous_tape_records(monkeypatch
     monkeypatch.setattr(journal_module,'read_journal',records)
     assert journal_module.last_journal_identity('unused')=={'stream':'old-generation','last_recoverable_offset':1000}
     assert all(r() is None for r in live)
+
+
+def test_candidate_timeout_cancels_rate_wait_and_releases_initialization_budget(tmp_path,monkeypatch):
+    import lobv2.node as node
+    from lobv2.core import Plant
+    from lobv2.reader import Session
+    from test_semantics import SCOPE
+    async def run():
+        entered=asyncio.Event()
+        async def wait_credit(config):entered.set();await asyncio.Event().wait()
+        monkeypatch.setattr(node,'connection_credit',wait_credit)
+        class Lease:
+            released=False
+            def release(self):self.released=True
+        journal=Journal(tmp_path,'P','capture');plant=Plant(journal,SCOPE);lease=Lease()
+        session=Session(plant,0,0,0,1,SCOPE['markets'],{},asyncio.Event(),lease)
+        session.task=asyncio.create_task(session.run());await entered.wait()
+        await asyncio.wait_for(session.close('CONNECTION_ADMISSION_TIMEOUT'),1)
+        assert session.task.done() and not session.task.cancelled() and lease.released
+        assert not plant.books and not plant.connections
+        await journal.close()
+    asyncio.run(run())

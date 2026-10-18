@@ -55,7 +55,10 @@ async def connection_credit(config):
                 return 0
             return max(.001,prior-now)+random.uniform(0,.1*interval)
     while True:
-        delay=await asyncio.to_thread(reserve)
+        # LOCK_NB makes this tiny local-file critical section nonblocking on
+        # contention. A thread-pool round trip loses every rate-slot race against
+        # older collectors sharing this limiter, starving newly started lanes.
+        delay=reserve()
         if not delay:return
         # Reserve only the slot actually used. Cancelled connection tasks cannot
         # leave minutes of phantom reservations behind a plant restart.

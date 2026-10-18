@@ -54,8 +54,14 @@ class Session:
 
     async def close(self,reason):
         self.failure=reason
+        self.closing=True
         if self.ws is not None:
             await self.ws.close(code=1011,reason=reason[:100])
+        elif getattr(self,'task',None) is not None and not self.task.done():
+            # A budget lease also covers rate-credit and WS handshake waits.
+            # Closing a not-yet-open socket must cancel those waits and release it.
+            self.task.cancel()
+            await asyncio.gather(self.task,return_exceptions=True)
 
     async def subscribe_more(self,markets):
         if not markets:return
@@ -180,7 +186,7 @@ class Session:
                 done,_=await asyncio.wait(workers,return_when=asyncio.FIRST_COMPLETED)
                 for task in done:task.result()
         except asyncio.CancelledError:
-            raise
+            if not self.closing:raise
         except (OSError,websockets.WebSocketException,asyncio.TimeoutError) as exc:
             self.failure=repr(exc)
             plant.journal.append("WS_ERROR",{"connection":self.connection,"error":self.failure})
@@ -278,7 +284,7 @@ async def session_manager(plant,logical,lane,markets,config,stop):
             local=next((plant.local_issue(s.shard,lane) for s in sessions if plant.local_issue(s.shard,lane)),None)
             grace=not sessions or min(now-s.started for s in sessions)>config.get("backlog_reconnect_grace_seconds",60)
             if missing and not initializing and not local and grace and now>=next_attempt and len(sessions)<config.get("max_sessions_per_logical_lane",8):
-                lease=RecoveryBudget(config,role,provider,initial=not sessions,tokens=2*len(missing))
+                lease=RecoveryBudget(config,role,provider,initial=epoch==0,tokens=2*len(missing))
                 if await lease.acquire_async():
                     epoch+=1
                     physical=logical+(epoch-1)*1_000_000
