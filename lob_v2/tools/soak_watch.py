@@ -33,10 +33,11 @@ def observe(deployment, detailed):
                 'pending_records','pending_publication_records','journal_oldest_age_ms','stage_metrics',
                 'failure','admission_failure','resources','cut_receipts','catalog_revision')}
         except (OSError,ValueError) as exc:errors.append(node+':'+repr(exc))
-    identities={r['producer']:{k:r['provenance'].get(k) for k in ('source_sha256','code_version','config_sha256')} for r in rows}
+    identities={r['producer']:{k:(r.get('provenance') or {}).get(k) for k in ('source_sha256','code_version','config_sha256')} for r in rows}
     fingerprint=hashlib.sha256(json.dumps(identities,sort_keys=True).encode()).hexdigest()
     return {'utc_ns':now,'nodes':rows,'detailed_nodes':detail,'errors':errors,'build_config_fingerprint':fingerprint,
-        'versions':dict(Counter(r['provenance'].get('code_version') for r in rows)),
+        'versions':dict(Counter((r.get('provenance') or {}).get('code_version','UNKNOWN') for r in rows)),
+        'fixed_build_proof':'NOT_AVAILABLE_FOR_LEGACY_SUMMARIES' if any(not r.get('provenance') for r in rows) else 'RECORDED',
         'scope':'ALL_CONFIGURED_PRODUCTION_NODES; detailed latency only for explicitly listed canaries',
         'coverage_contract':'Counts are observations, not a same-catalog completeness certificate'}
 
@@ -52,7 +53,7 @@ def main():
         if not state or state['build_config_fingerprint']!=row['build_config_fingerprint'] or now-state['last_sample_ns']>180*10**9:
             state={'continuous_window_start_ns':now,'samples':0,'duration_gate':'NOT_COMPLETE'}
         state.update(last_sample_ns=now,build_config_fingerprint=row['build_config_fingerprint'],
-            versions=row['versions'],errors=row['errors'],samples=state['samples']+1)
+            versions=row['versions'],errors=row['errors'],fixed_build_proof=row['fixed_build_proof'],samples=state['samples']+1)
         elapsed=(now-state['continuous_window_start_ns'])/1e9
         crossed=now//(86400*10**9)>state['continuous_window_start_ns']//(86400*10**9)
         state.update(elapsed_seconds=elapsed,crossed_utc_midnight=crossed,
