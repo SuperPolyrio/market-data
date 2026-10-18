@@ -20,10 +20,10 @@ from lobv2.wire import json_bytes
 
 def project(settings,receipts,output):
     if settings['archive'].get('local_tier'):
-        from archive_receiver import read,put
+        from archive_receiver import read as read_object,put as put_object
         class TierStore:
-            get=staticmethod(read)
-            put=staticmethod(put)
+            get=staticmethod(read_object)
+            put=staticmethod(put_object)
         store=TierStore()
     else:
         config={**settings['archive']['ssh_store'],'lock_root':str(output/'network-budget'),'concurrency':1}

@@ -321,12 +321,47 @@ def unused_port():
         return sock.getsockname()[1]
 
 
+class FaultRelay:
+    """Private TCP passthrough: closing it faults only one trial WS lane."""
+    def __init__(self,upstream):
+        self.upstream=upstream;self.port=unused_port();self.tasks=set();self.server=None
+
+    async def start(self):
+        async def connected(reader,writer):
+            task=asyncio.current_task();self.tasks.add(task);peer=None;copies=[]
+            async def copy(src,dst):
+                while data:=await src.read(65536):dst.write(data);await dst.drain()
+            try:
+                other,peer=await asyncio.open_connection(*self.upstream)
+                copies=[asyncio.create_task(copy(reader,peer)),asyncio.create_task(copy(other,writer))]
+                await asyncio.wait(copies,return_when=asyncio.FIRST_COMPLETED)
+            finally:
+                for child in copies:child.cancel()
+                await asyncio.gather(*copies,return_exceptions=True)
+                writer.close()
+                if peer:peer.close()
+                self.tasks.discard(task)
+        self.server=await asyncio.start_server(connected,'127.0.0.1',self.port)
+
+    async def close(self):
+        self.server.close();await self.server.wait_closed()
+        pending=list(self.tasks)
+        for task in pending:task.cancel()
+        await asyncio.gather(*pending,return_exceptions=True)
+
+
 async def live_acceptance(args):
     root = Path(args.root).resolve()
     root.mkdir(parents=True,exist_ok=False)
     shutil.copyfile(args.scope,root/"scope.json")
     base = json.loads((Path(__file__).parents[1]/"config/base.json").read_bytes())
     base.update(lanes=args.lanes,assets_per_connection=args.capacity)
+    relays={}
+    if args.faults and os.getenv('LOBV2_TEST_SOCKS_UPSTREAM'):
+        host,port=os.environ['LOBV2_TEST_SOCKS_UPSTREAM'].rsplit(':',1)
+        for plant in ('P','Q'):
+            for lane in range(args.lanes):
+                relay=FaultRelay((host,int(port)));await relay.start();relays[plant,lane]=relay
     ports = {name:unused_port() for name in ("P","Q","G")}
     # Isolated self-signed localhost CA/cert for mutual TLS in this run only.
     cert_dir = root/"tls"
@@ -340,6 +375,7 @@ async def live_acceptance(args):
         config = deepcopy(base)
         config["archive"]={"store_uri":str(root/"object-store"),"poll_seconds":2}
         config["listen"].update(port=ports[name],tls=tls)
+        if name!='G' and relays:config['lane_proxies']=['socks5://127.0.0.1:'+str(relays[name,lane].port) for lane in range(args.lanes)]
         if name=="G":
             config["plants"] = {p:{"host":"127.0.0.1","port":ports[p],"tls":tls} for p in ("P","Q")}
         atomic_json(root/f"config-{name}.json",config)
@@ -372,7 +408,25 @@ async def live_acceptance(args):
     try:
         for name in ("P","Q","G"): await start_node(name)
         if args.faults:
-            await wait_live(args.seconds*.4)
+            await wait_live(args.seconds*.25)
+            if relays and args.lanes==2:
+                g=json.loads((root/'G/status.json').read_bytes())
+                plant=Counter(g['selected'].values()).most_common(1)[0][0] if g['selected'] else 'P'
+                state=json.loads((root/plant/'status.json').read_bytes())
+                affected={m for m,key in state['selected'].items() if key[2]==0}
+                active={(r['market'],r['lane']):r['shard'] for r in state.get('active_source_routes',[])}
+                tokens=Counter(s['market'] for s in state['token_states'] if s['lane']==1 and s['ready']
+                    and active.get((s['market'],1))==s['shard'])
+                qualified={m for m,count in tokens.items() if count==2}
+                if affected and affected<=qualified and time.time_ns()-state['utc_ns']<5*10**9:
+                    atomic_json(root/'lane-backup-before-fault.json',state)
+                    at=time.monotonic_ns();await relays[plant,0].close();await wait_live(5)
+                    after=json.loads((root/plant/'status.json').read_bytes());atomic_json(root/'lane-after-fault.json',after)
+                    faults.append({'kind':'PRIMARY_LANE_TCP_CLOSED','plant':plant,'lane':0,'mono_ns':at,
+                        'backup_verified_markets':sorted(affected),'after_selected':after['selected']})
+                    await relays[plant,0].start()
+                else:faults.append({'kind':'LANE_FAULT_NOT_RUN','reason':'BACKUP_NOT_QUALIFIED','missing_markets':sorted(affected-qualified)})
+            await wait_live(max(1,args.seconds*.15-5))
             # SIGKILL one selected plant, then restart. This is not a power-loss test.
             selected_before = json.loads((root/"G/status.json").read_bytes()).get("selected",{})
             victim = Counter(selected_before.values()).most_common(1)[0][0] if selected_before else "P"
@@ -425,6 +479,7 @@ async def live_acceptance(args):
                     proc.kill()
                     await proc.wait()
             if name in logs: logs[name].close()
+        for relay in relays.values():await relay.close()
     audit = audit_run(root)
     consumer=verify_consumer(root)
     query = export_parquet(root/"G",root/"query")

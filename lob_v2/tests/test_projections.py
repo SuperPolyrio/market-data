@@ -119,3 +119,18 @@ def test_live_quiet_checkpoint_waits_for_exact_archive_prefix(tmp_path,monkeypat
         assert receipt['generated_utc_ns']==snapshot['generated_utc_ns'] and receipt['native_events_created']==0
         assert not list((output/'pending').glob('*')) and source.exists()
     asyncio.run(run())
+
+
+def test_archive_host_projection_uses_same_immutable_store_contract(tmp_path,monkeypatch):
+    import importlib.util,sys,types
+    inputs,manifests,store=captured(tmp_path)
+    monkeypatch.setitem(sys.modules,'archive_receiver',types.SimpleNamespace(read=store.get,put=store.put))
+    path=Path(__file__).parents[1]/'tools/project_archive.py';spec=importlib.util.spec_from_file_location('project_archive_test',path)
+    module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+    key=store.keys('commits/')[0];row={'manifest_key':key,'manifest':json.loads(store.get(key))}
+    output=tmp_path/'output';output.mkdir()
+    result=module.project({'archive':{'local_tier':True}},[row],output)
+    assert result['custody']=='ARCHIVE_HOST_FULL_READBACK'
+    assert result['local_verification']['original_frames_readback']=='IDENTICAL'
+    assert result['local_verification']['occurrences']==3
+    assert store.get(result['remote_query']['manifest_key'])
