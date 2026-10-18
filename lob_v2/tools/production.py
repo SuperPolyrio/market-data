@@ -36,6 +36,16 @@ def enroll_locked(root, scope):
     settings = load(root/"settings.json")
     manifest_path = root/"deployment.json"
     manifest = load(manifest_path) if manifest_path.exists() else {"cohorts":[],"ownership":{},"conflicts":[]}
+    # A crash after publishing the tail scope but before the deployment index is
+    # repaired from that durable scope; its members must never get a second owner.
+    tail_scope=None
+    if manifest['cohorts']:
+        tail=manifest['cohorts'][-1]
+        tail_scope=load(root/'scopes'/(tail['id']+'.json'))
+        for row in tail_scope['markets']:
+            manifest['ownership'].setdefault(row['market'],{'cohort':tail['id'],'assets':row['assets'],'version':row['version']})
+        tail.update(markets=len(tail_scope['markets']),tokens=sum(len(m['assets']) for m in tail_scope['markets']),
+            scope_digest=tail_scope['catalog_digest'])
     from lobv2.catalog_owner import CatalogOwner
     owner=CatalogOwner(root)
     # Migrate known, still-unresolved ownership without erasing members merely
@@ -72,6 +82,24 @@ def enroll_locked(root, scope):
             continue
         fresh.append(market)
     fresh.sort(key=lambda m:hashlib.sha256(m["market"].encode()).digest())
+    def write_scope(name,group):
+        group_scope = {**scope,"markets":group,"scope_kind":"UNIVERSE_OWNERSHIP_COHORT",
+            "parent_catalog_digest":scope["catalog_digest"],"catalog_digest":hashlib.sha256(json_bytes(group)).hexdigest()}
+        for field in ('excluded','unresolved','terminal_evidence','scope_exclusions','unadmitted_groups','pending_validation'):
+            group_scope.pop(field,None)
+        atomic_json(root/'scopes'/(name+'.json'),group_scope)
+        return group_scope['catalog_digest']
+    if fresh and tail_scope is not None and settings.get('fill_existing_cohorts',False):
+        tail=manifest['cohorts'][-1]
+        room=max(0,settings['markets_per_cohort']-len(tail_scope['markets']))
+        added=fresh[:room]
+        if added:
+            group=tail_scope['markets']+added
+            tail['scope_digest']=write_scope(tail['id'],group)
+            tail.update(markets=len(group),tokens=sum(len(m['assets']) for m in group),updated_ns=time.time_ns())
+            for market in added:
+                manifest['ownership'][market['market']]={'cohort':tail['id'],'assets':market['assets'],'version':market['version']}
+            fresh=fresh[len(added):]
     for start in range(0,len(fresh),settings["markets_per_cohort"]):
         group = fresh[start:start+settings["markets_per_cohort"]]
         index = len(manifest["cohorts"])
@@ -79,14 +107,7 @@ def enroll_locked(root, scope):
             scope['unadmitted_groups'].extend({'market':m['market'],'reason':'PORT_SPACE_EXHAUSTED'} for m in fresh[start:])
             break
         name = f"{index:04d}"
-        group_scope = {**scope,"markets":group,"scope_kind":"UNIVERSE_OWNERSHIP_COHORT",
-            "parent_catalog_digest":scope["catalog_digest"],"catalog_digest":hashlib.sha256(json_bytes(group)).hexdigest()}
-        # The full denominator is stored once, not copied into every RUN_START.
-        group_scope.pop("excluded",None)
-        group_scope.pop("unresolved",None)
-        for field in ('terminal_evidence','scope_exclusions','unadmitted_groups','pending_validation'):
-            group_scope.pop(field,None)
-        atomic_json(root/"scopes"/(name+".json"),group_scope)
+        scope_digest=write_scope(name,group)
         for offset, role in enumerate(("P","Q","G")):
             instance = role+"-"+name
             config = load(PACKAGE/"config/base.json")
@@ -104,7 +125,8 @@ def enroll_locked(root, scope):
             atomic_json(root/"instances"/(instance+".json"),{"role":"gateway" if role=="G" else "plant",
                 "node_id":instance,"config":config,"scope_file":str(root/"scopes"/(name+".json")),
                 "root":str(Path(settings["data_root"])/instance)})
-        manifest["cohorts"].append({"id":name,"markets":len(group),"tokens":2*len(group),"created_ns":time.time_ns()})
+        manifest["cohorts"].append({"id":name,"markets":len(group),"tokens":2*len(group),"created_ns":time.time_ns(),
+            'scope_digest':scope_digest})
         for market in group:
             manifest["ownership"][market["market"]] = {"cohort":name,"assets":market["assets"],"version":market["version"]}
     if input_scope.get("full_universe_sweep"):
@@ -119,8 +141,12 @@ def enroll_locked(root, scope):
         if row['market'] in manifest['ownership']:
             controls[manifest['ownership'][row['market']]['cohort']].append({**row,'reason':row.get('reason','CATALOG_TERMINAL_OR_EXCLUDED')})
     for cohort,blocked_rows in controls.items():
+        cohort_meta=next(c for c in manifest['cohorts'] if c['id']==cohort)
+        digest=cohort_meta.get('scope_digest')
+        if digest is None:digest=load(root/'scopes'/(cohort+'.json'))['catalog_digest']
         atomic_json(root/'controls'/(cohort+'.json'),{'catalog_revision':scope['catalog_revision'],
-            'scope_policy_version':scope['scope_policy_version'],'membership_digest':scope['membership_digest'],'blocked':blocked_rows})
+            'scope_policy_version':scope['scope_policy_version'],'membership_digest':scope['membership_digest'],
+            'cohort_scope_digest':digest,'blocked':blocked_rows})
     # Commit after all cohort files; readers defer future revisions until this head.
     atomic_json(root/'catalog-head.json',{'catalog_revision':scope['catalog_revision'],
         'scope_policy_version':scope['scope_policy_version'],'membership_digest':scope['membership_digest'],
@@ -248,10 +274,13 @@ async def supervise(root):
         label = "events" if events else "markets"
         while True:
             try:
-                scope = await discover(events=events,progress_path=root/(label+"-sweep-progress.json"),budget=budget)
+                from lobv2.catalog import acknowledge_discovery_cache
+                cache=root/(label+'-sweep-pages.sqlite')
+                scope = await discover(events=events,progress_path=root/(label+"-sweep-progress.json"),budget=budget,resume_path=cache)
                 atomic_json(root/"catalogs"/(label+"-"+str(scope["sweep_end_ns"])+".json"),scope)
                 atomic_json(root/("events-universe.json" if events else "universe.json"),scope)
                 await asyncio.to_thread(enroll,root,scope)
+                await asyncio.to_thread(acknowledge_discovery_cache,cache)
                 atomic_json(root/(label+"-discovery-status.json"),{"utc_ns":time.time_ns(),"status":"COMPLETE",
                     "markets":len(scope["markets"]),"unresolved":len(scope["unresolved"]),"full_universe_sweep":scope["full_universe_sweep"]})
                 delay=load(root/"settings.json").get("discovery_seconds",120)
@@ -286,7 +315,7 @@ def main():
     elif args.command == "instance":
         instance = load(args.root/"instances"/(args.instance+".json"))
         instance['config'].update(catalog_control_file=str(args.root/'controls'/(args.instance.split('-',1)[1]+'.json')),
-            catalog_head_file=str(args.root/'catalog-head.json'))
+            catalog_head_file=str(args.root/'catalog-head.json'),scope_file=instance['scope_file'])
         asyncio.run(run_node(instance["role"],instance["node_id"],instance["config"],load(Path(instance["scope_file"])),instance["root"]))
     elif args.command == "health":
         print(json.dumps(health(args.root),indent=2))

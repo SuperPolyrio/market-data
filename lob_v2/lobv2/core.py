@@ -10,7 +10,7 @@ import heapq
 from .book import SourceBook, apply_state as apply, inspect, state_view, prepare_record, ChangeGroup, uncrossed, freeze_state
 from .wire import ByteQueue
 
-POLICY = "single_healthy_route_catalog_admission_v2.2.0"
+POLICY = "single_healthy_route_catalog_admission_v2.2.1"
 
 
 async def decode_events(raw):
@@ -107,13 +107,30 @@ class Owner:
     async def apply_catalog_control(self,control):
         revision=control['catalog_revision']
         if revision<self.catalog_revision:raise ValueError('CATALOG_REVISION_REGRESSION')
+        added=[]
+        if 'market_groups' in control:
+            from .catalog import validate_scope
+            validate_scope({'markets':control['market_groups']})
+            for row in control['market_groups']:
+                old=self.scope.get(row['market'])
+                if old and any(old[k]!=row[k] for k in ('assets','version','asset_id_kind')):
+                    raise ValueError('CATALOG_IDENTITY_MIGRATION_REQUIRED')
+                if old is None:added.append(row)
+            validate_scope({'markets':list(self.scope.values())+added})
+        if added:
+            # This record precedes every observation and emission for new members.
+            self.journal.append('CATALOG_SCOPE_UPSERT',{'catalog_revision':revision,'markets':added})
+            self.scope.update((row['market'],row) for row in added)
+            for subscription in self.subscribers:
+                if subscription.get('follow_scope'):
+                    subscription['markets'].update(row['market'] for row in added)
         blocked={m['market']:m for m in control['blocked'] if m['market'] in self.scope}
-        if revision==self.catalog_revision and blocked==self.blocked_markets:return
+        if revision==self.catalog_revision and blocked==self.blocked_markets and not added:return
         previous=self.blocked_markets
         self.catalog_revision=revision
         self.scope_policy_version=control['scope_policy_version']
         self.blocked_markets=blocked
-        self.journal.append('CATALOG_APPLIED',control)
+        self.journal.append('CATALOG_APPLIED',{k:v for k,v in control.items() if k!='market_groups'})
         started=time.monotonic_ns()
         for market in set(blocked)|set(previous):
             if market in blocked:
@@ -296,6 +313,10 @@ class Plant(Owner):
         self.connection_epochs[(shard,lane)] = epoch
         self.journal.append("CONNECT", {"shard": shard, "lane": lane, "connection": connection,
                                         "connection_epoch": epoch})
+        self.assign(shard,lane,connection,epoch,markets)
+
+    def assign(self,shard,lane,connection,epoch,markets):
+        if self.connections.get((shard,lane))!=connection:raise ValueError('SESSION_MISMATCH')
         for market in markets:
             key = (market["market"], shard, lane)
             self.books[key] = SourceBook(market["market"], market["assets"])
@@ -375,7 +396,10 @@ class Plant(Owner):
 
     def consider_admission(self,key):
         if key in self.admission_pending or key in self.admitted_keys or not self.base_usable(key):return
-        if not all(self.states[(key[1],key[2],t)]["baseline_durable"] for t in self.books[key].assets):return
+        connection=self.connections[key[1:]]
+        if not all((state:=self.states[(key[1],key[2],t)])["written"] and state['connection']==connection
+                   and state.get('baseline_session')==connection and state["baseline_durable"]
+                   for t in self.books[key].assets):return
         self.journal.append("SOURCE_ADMISSION",{"key":list(key),"connection":self.connections[key[1:]],
             "input_cut":self.journal.offset,"source_book_version":self.books[key].version})
         self.admission_pending.add(key)

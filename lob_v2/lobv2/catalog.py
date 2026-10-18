@@ -69,11 +69,24 @@ def shards(scope, capacity):
     return result
 
 
-async def discover(limit=None, *, slugs=(), pages=None, events=False, progress_path=None, budget=None):
+async def discover(limit=None, *, slugs=(), pages=None, events=False, progress_path=None, budget=None, resume_path=None):
     """Exhaust keyset pagination unless an explicit sample budget was requested."""
     started = time.time_ns()
     found, unresolved, excluded, cursor, seen = {}, [], [], None, set()
     page_count, exhausted = 0, False
+    cache=None
+    if resume_path:
+        import sqlite3
+        cache=sqlite3.connect(resume_path,check_same_thread=False)
+        cache.execute('PRAGMA journal_mode=WAL');cache.execute('PRAGMA synchronous=FULL')
+        cache.execute('CREATE TABLE IF NOT EXISTS scan(started INTEGER,events INTEGER)')
+        cache.execute('CREATE TABLE IF NOT EXISTS pages(n INTEGER PRIMARY KEY,request_cursor TEXT,next_cursor TEXT,payload BLOB)')
+        header=cache.execute('SELECT started,events FROM scan').fetchone()
+        if header:
+            started=header[0]
+            if header[1]!=int(events):raise ValueError('DISCOVERY_CACHE_SCOPE_MISMATCH')
+        else:
+            with cache:cache.execute('INSERT INTO scan VALUES (?,?)',(started,int(events)))
     def consume(rows):
         for row in rows:
             if row.get("closed") or row.get("enableOrderBook") is False:
@@ -84,54 +97,77 @@ async def discover(limit=None, *, slugs=(), pages=None, events=False, progress_p
                 found[parsed["market"]] = parsed
             except (ValueError, TypeError, json.JSONDecodeError) as exc:
                 unresolved.append({"id":row.get("id"),"reason":str(exc)})
-    async with httpx.AsyncClient(timeout=45) as client:
-        if slugs:
-            for slug in slugs:
-                if budget:await budget.wait()
-                response = await client.get(GAMMA+"/markets",params={"slug":slug})
-                response.raise_for_status()
-                consume(response.json())
-        else:
-            while pages is None or page_count < pages:
-                params = {"closed":"false","limit":100}
-                if cursor:
-                    params["after_cursor"] = cursor
-                for attempt in range(5):
-                    try:
-                        if budget:await budget.wait()
-                        response = await client.get(GAMMA+("/events/keyset" if events else "/markets/keyset"),params=params)
-                        response.raise_for_status()
-                        break
-                    except (httpx.HTTPError, OSError):
-                        if attempt == 4:
-                            raise
+    def page_rows(data):
+        rows=data if isinstance(data,list) else data.get('data',data.get('events' if events else 'markets',[]))
+        return [market for event in rows for market in event.get('markets',[])] if events else rows
+    if cache:
+        for n,request_cursor,next_cursor,payload in cache.execute('SELECT * FROM pages ORDER BY n'):
+            if n!=page_count+1 or request_cursor!=cursor:raise ValueError('DISCOVERY_CACHE_PREFIX_GAP')
+            consume(page_rows(json.loads(payload)))
+            page_count=n;cursor=next_cursor;exhausted=not cursor
+            if cursor in seen:raise ValueError('REPEATED_DISCOVERY_CURSOR')
+            if cursor:seen.add(cursor)
+    try:
+        async with httpx.AsyncClient(timeout=45) as client:
+            if slugs:
+                for slug in slugs:
+                    if budget:await budget.wait()
+                    response = await client.get(GAMMA+"/markets",params={"slug":slug})
+                    response.raise_for_status()
+                    consume(response.json())
+            else:
+                while not exhausted and (pages is None or page_count < pages):
+                    params = {"closed":"false","limit":100}
+                    if cursor:
+                        params["after_cursor"] = cursor
+                    for attempt in range(5):
+                        try:
+                            if budget:await budget.wait()
+                            response = await client.get(GAMMA+("/events/keyset" if events else "/markets/keyset"),params=params)
+                            response.raise_for_status()
+                            break
+                        except (httpx.HTTPError, OSError):
+                            if attempt == 4:
+                                raise
+                            import asyncio
+                            await asyncio.sleep(2**attempt)
+                    data = response.json()
+                    next_cursor=data.get('next_cursor') if isinstance(data,dict) else None
+                    if next_cursor and next_cursor in seen:raise ValueError('REPEATED_DISCOVERY_CURSOR')
+                    consume(page_rows(data))
+                    page_count += 1
+                    if cache:
                         import asyncio
-                        await asyncio.sleep(2**attempt)
-                data = response.json()
-                rows = data if isinstance(data,list) else data.get("data",data.get("events" if events else "markets",[]))
-                if events:
-                    rows = [market for event in rows for market in event.get("markets",[])]
-                consume(rows)
-                page_count += 1
-                if progress_path:
-                    from .journal import atomic_json
-                    atomic_json(progress_path,{"utc_ns":time.time_ns(),"sweep_start_ns":started,
-                        "pages":page_count,"markets":len(found),"unresolved":len(unresolved),
-                        "excluded":len(excluded),"status":"SCANNING","full_universe_sweep":False})
-                next_cursor = data.get("next_cursor") if isinstance(data,dict) else None
-                if not next_cursor:
-                    exhausted = True
-                    break
-                if next_cursor in seen:
-                    raise ValueError("REPEATED_DISCOVERY_CURSOR")
-                seen.add(next_cursor)
-                cursor = next_cursor
-    selected = list(found.values()) if limit is None else list(found.values())[:limit]
-    full = exhausted and limit is None and not slugs and not events
-    scope = {"schema":2,"catalog_revision":started,"scope_kind":"OPEN_BINARY_UNIVERSE" if full else "BOUNDED_SAMPLE",
-             "sweep_start_ns":started,"sweep_end_ns":time.time_ns(),"pages":page_count,
-             "full_universe_sweep":full,"markets":selected,"unresolved":unresolved,"excluded":excluded}
-    scope["discovery_source"] = "GAMMA_EVENTS_KEYSET" if events else "GAMMA_MARKETS_KEYSET"
-    scope["full_events_sweep"] = bool(events and exhausted and limit is None)
-    scope["catalog_digest"] = hashlib.sha256(json_bytes(selected)).hexdigest()
-    return validate_scope(scope)
+                        def persist_page():
+                            with cache:cache.execute('INSERT INTO pages VALUES (?,?,?,?)',(page_count,cursor,next_cursor,response.content))
+                        await asyncio.to_thread(persist_page)
+                    if progress_path:
+                        from .journal import atomic_json
+                        atomic_json(progress_path,{"utc_ns":time.time_ns(),"sweep_start_ns":started,
+                            "pages":page_count,"markets":len(found),"unresolved":len(unresolved),
+                            "excluded":len(excluded),"status":"SCANNING","full_universe_sweep":False})
+                    if not next_cursor:
+                        exhausted = True
+                        break
+                    if next_cursor in seen:
+                        raise ValueError("REPEATED_DISCOVERY_CURSOR")
+                    seen.add(next_cursor)
+                    cursor = next_cursor
+        selected = list(found.values()) if limit is None else list(found.values())[:limit]
+        full = exhausted and limit is None and not slugs and not events
+        scope = {"schema":2,"catalog_revision":started,"scope_kind":"OPEN_BINARY_UNIVERSE" if full else "BOUNDED_SAMPLE",
+                 "sweep_start_ns":started,"sweep_end_ns":time.time_ns(),"pages":page_count,
+                 "full_universe_sweep":full,"markets":selected,"unresolved":unresolved,"excluded":excluded}
+        scope["discovery_source"] = "GAMMA_EVENTS_KEYSET" if events else "GAMMA_MARKETS_KEYSET"
+        scope["full_events_sweep"] = bool(events and exhausted and limit is None)
+        scope["catalog_digest"] = hashlib.sha256(json_bytes(selected)).hexdigest()
+        return validate_scope(scope)
+    finally:
+        if cache:cache.close()
+
+
+def acknowledge_discovery_cache(path):
+    """Only the successfully enrolled full result may release staged pages."""
+    import sqlite3
+    with sqlite3.connect(path) as db:
+        db.execute('DELETE FROM pages');db.execute('DELETE FROM scan')

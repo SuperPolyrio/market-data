@@ -41,6 +41,7 @@ class Session:
         self.last_inbound=self.started
         self.phase="CANDIDATE_INITIALIZING"
         self.pending=set(m["market"] for m in markets)
+        self.pending_since={m['market']:self.started for m in markets}
         self.failure=None
         self.ever_admitted=False
         self.last_baseline=self.started
@@ -55,6 +56,26 @@ class Session:
         self.failure=reason
         if self.ws is not None:
             await self.ws.close(code=1011,reason=reason[:100])
+
+    async def subscribe_more(self,markets):
+        if not markets:return
+        if any((m['market'],self.shard,self.lane) in self.plant.books for m in markets):
+            raise ValueError('DUPLICATE_DYNAMIC_ASSIGNMENT')
+        self.plant.assign(self.shard,self.lane,self.connection,self.epoch,markets)
+        self.markets.extend(markets)
+        now=time.monotonic()
+        self.pending.update(m['market'] for m in markets)
+        self.pending_since.update((m['market'],now) for m in markets)
+        self.last_baseline=now
+        tokens=[t for m in markets for t in m['assets']]
+        for token in tokens:self.plant.states[(self.shard,self.lane,token)].update(
+            logical_shard=self.logical,session_role='ACTIVE_WITH_PENDING_INITIALIZATION',desired_revision=self.plant.catalog_revision)
+        attempt=str(uuid.uuid4())
+        self.plant.journal.append('SUBSCRIPTION_WRITE_START',{'connection':self.connection,'assets':tokens,
+            'send_attempt_id':attempt,'operation':'subscribe','catalog_revision':self.plant.catalog_revision})
+        await self.ws.send(json_bytes({'operation':'subscribe','assets_ids':tokens,'initial_dump':True,
+            'level':2,'custom_feature_enabled':True}).decode())
+        self.plant.written(self.shard,self.lane,self.connection,tokens,attempt)
 
     async def reader(self):
         seq=0
@@ -218,7 +239,7 @@ async def session_manager(plant,logical,lane,markets,config,stop):
                     for market in session.markets:
                         for token in market["assets"]:plant.states[(session.shard,lane,token)]["session_role"]=phase
                 if admitted and not session.pending:session.lease.release()
-                if session.pending and (now-session.started>config.get("first_snapshot_timeout_seconds",300) or
+                if session.pending and (now-min(session.pending_since[m] for m in session.pending)>config.get("first_snapshot_timeout_seconds",300) or
                         admitted and now-session.last_baseline>config.get("partial_initialization_idle_seconds",30)):
                     missing=session.pending-admitted
                     plant.journal.append("SNAPSHOT_TIMEOUT",{"connection":session.connection,"markets":sorted(missing),
@@ -235,9 +256,25 @@ async def session_manager(plant,logical,lane,markets,config,stop):
                 if not session.ever_admitted and not plant.local_issue(session.shard,lane) and now-session.started>config.get("backlog_reconnect_grace_seconds",60) and (
                         session.probe.ambiguous or session.baseline_frame_bytes>config.get("max_snapshot_bytes_per_session",64*1024*1024)):
                     await session.close("UNKNOWN_INGRESS_LAG" if session.probe.ambiguous else "INITIALIZATION_BYTES_EXCEEDED")
+            # New directory members can join an existing healthy socket without
+            # invalidating its current books. A missing dump still needs recovery.
+            assigned={m['market'] for s in sessions for m in s.markets}
+            fresh=[m for m in markets if m['market'] not in assigned and m['market'] not in plant.blocked_markets]
+            for session in sessions:
+                if not fresh:break
+                if session.phase!='ACTIVE' or session.ws is None or session.closing or not plant.healthy_transport(session.shard,lane):continue
+                room=max(0,(config['assets_per_connection']-sum(len(m['assets']) for m in session.markets))//2)
+                group=fresh[:room]
+                if group:
+                    lease=RecoveryBudget(config,role,provider,initial=False,tokens=2*len(group))
+                    if not await lease.acquire_async():continue
+                    session.lease=lease
+                    try:await session.subscribe_more(group)
+                    except (OSError,websockets.WebSocketException):await session.close('DYNAMIC_SUBSCRIPTION_FAILED')
+                    fresh=fresh[len(group):]
             qualified={m["market"] for m in markets if any(plant.usable(k) for k in plant.market_keys.get(m["market"],()) if k[2]==lane)}
             missing=[m for m in markets if m["market"] not in qualified and m['market'] not in plant.blocked_markets]
-            initializing=any(s.phase=="CANDIDATE_INITIALIZING" for s in sessions)
+            initializing=any(s.pending for s in sessions)
             local=next((plant.local_issue(s.shard,lane) for s in sessions if plant.local_issue(s.shard,lane)),None)
             grace=not sessions or min(now-s.started for s in sessions)>config.get("backlog_reconnect_grace_seconds",60)
             if missing and not initializing and not local and grace and now>=next_attempt and len(sessions)<config.get("max_sessions_per_logical_lane",8):

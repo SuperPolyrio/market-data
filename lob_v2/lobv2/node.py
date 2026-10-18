@@ -160,6 +160,7 @@ async def serve(owner, config, stop):
             session = str(uuid.uuid4())
             async with snapshot_slots:
                 snapshot, subscription = owner.bootstrap(hello.body.get("markets"), config["queue_bytes"],deferred=True)
+                subscription['follow_scope']=bool(hello.body.get('follow_scope')) and hello.body.get('markets') is None
                 await asyncio.wait_for(transmit_snapshot(writer, reader, snapshot, session,subscription["queue"]), 30)
             while not stop.is_set():
                 if subscription["queue"].failed:
@@ -249,12 +250,51 @@ async def catalog_control_loop(owner,config,stop):
             if mtime==stamp:return None
             control=json.loads(path.read_bytes());commit=json.loads(head.read_bytes())
             if control['catalog_revision']>commit['catalog_revision']:return None
+            digest=control.get('cohort_scope_digest')
+            if digest and digest!=getattr(owner,'cohort_scope_digest',None):
+                scope=json.loads(Path(config['scope_file']).read_bytes())
+                if hashlib.sha256(json_bytes(scope['markets'])).hexdigest()!=digest:return None
+                control['market_groups']=scope['markets']
             return mtime,control
         update=await asyncio.to_thread(read)
         if update:
             await owner.apply_catalog_control(update[1]);stamp=update[0]
+            owner.cohort_scope_digest=update[1].get('cohort_scope_digest')
         try:await asyncio.wait_for(stop.wait(),1)
         except asyncio.TimeoutError:pass
+
+
+async def scope_lanes_loop(plant,scope,config,stop):
+    groups=shards(scope,config['assets_per_connection'])
+    known=set(plant.scope)
+    workers=[]
+    def launch(shard):
+        workers.extend(asyncio.create_task(lane_loop(plant,shard,lane,groups[shard],config,stop))
+            for lane in range(config['lanes']))
+    for shard in range(len(groups)):launch(shard)
+    try:
+        while not stop.is_set():
+            for task in workers:
+                if task.done():
+                    task.result()
+                    raise RuntimeError('LANE_MANAGER_STOPPED')
+            for market in plant.scope.keys()-known:
+                row=plant.scope[market]
+                if sum(len(m['assets']) for m in groups[-1])+len(row['assets'])>config['assets_per_connection']:
+                    groups.append([row]);launch(len(groups)-1)
+                else:groups[-1].append(row)
+                known.add(market)
+            await asyncio.sleep(.25)
+    finally:
+        for task in workers:task.cancel()
+        await asyncio.gather(*workers,return_exceptions=True)
+
+
+async def await_catalog_members(owner,markets):
+    deadline=time.monotonic()+5
+    while not set(markets)<=owner.scope.keys():
+        if time.monotonic()>=deadline:raise ValueError('CATALOG_SCOPE_NOT_YET_COMMITTED')
+        await asyncio.sleep(.02)
 
 
 async def plant_session(gateway, plant, config, stop):
@@ -265,10 +305,11 @@ async def plant_session(gateway, plant, config, stop):
             reader, writer = await asyncio.wait_for(asyncio.open_connection(
                 config["host"],config["port"],ssl=ctx,
                 server_hostname=config.get("server_name","localhost") if ctx else None), 10)
-            await send(writer, control("HELLO", {"schema": 2, "role": "gateway"}))
+            await send(writer, control("HELLO", {"schema": 2, "role": "gateway",'follow_scope':True}))
             snapshot, session = await receive_snapshot(reader)
             await confirm_snapshot(reader,writer,snapshot,session)
             gateway.start_session(plant, session)
+            await await_catalog_members(gateway,[item['market'] for item in snapshot['items']])
             await gateway.snapshot_async(plant,session,snapshot)
             batch_records=0
             while not stop.is_set():
@@ -280,6 +321,7 @@ async def plant_session(gateway, plant, config, stop):
                         raise ValueError("INCOMPLETE_FLOW_BATCH")
                     await send(writer,control("FLOW_ACK",{"session":session}))
                 elif rec.kind == "PLANT_EMIT":
+                    if rec.body['market'] not in gateway.scope:await await_catalog_members(gateway,[rec.body['market']])
                     gateway.accept(plant,session,rec)
                     batch_records+=1
                     if batch_records>128:
@@ -544,6 +586,7 @@ async def run_node(role, node_id, config, scope, root, seconds=None):
         journal.append("STREAM_RESTART", {"previous_recoverable_tapes":previous,
             "continuity": "RESET_REQUIRED", "client_received_position": "UNKNOWN"})
     owner.runtime_config = config
+    owner.cohort_scope_digest=scope.get('catalog_digest')
     gc_started={}
     def gc_timing(phase,info):
         generation=info['generation']
@@ -578,9 +621,7 @@ async def run_node(role, node_id, config, scope, root, seconds=None):
         tasks.append(asyncio.create_task(catalog_control_loop(owner,config,stop)))
     if role == "plant":
         tasks.append(asyncio.create_task(qualification_loop(owner,stop)))
-        for shard, markets in enumerate(shards(scope,config["assets_per_connection"])):
-            for lane in range(config["lanes"]):
-                tasks.append(asyncio.create_task(lane_loop(owner,shard,lane,markets,config,stop)))
+        tasks.append(asyncio.create_task(scope_lanes_loop(owner,scope,config,stop)))
     else:
         tasks.extend(asyncio.create_task(plant_session(owner,p,endpoint,stop))
                      for p,endpoint in config["plants"].items())

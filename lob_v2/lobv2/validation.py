@@ -35,7 +35,9 @@ def reference_sources(records, scope, cutoff):
         if rec.offset > cutoff:
             continue
         body = rec.body
-        if rec.kind == "CONNECT":
+        if rec.kind=='CATALOG_SCOPE_UPSERT':
+            market_tokens.update((m['market'],m['assets']) for m in body['markets'])
+        elif rec.kind == "CONNECT":
             slot = (body["shard"],body["lane"])
             active[slot] = body["connection"]
             # Shard membership is identified by subsequent raw market incidence.
@@ -163,11 +165,11 @@ def coverage(plant_statuses, scope, start_ns, end_ns):
         "at_cut":cut,"upstream_event_completeness":"UNPROVEN"}
 
 
-def export_parquet(root, destination):
+def export_parquet(root, destination, record_source=None):
     import pyarrow as pa
     import pyarrow.parquet as pq
     destination.mkdir(parents=True,exist_ok=True)
-    rows, ranges = [], defaultdict(list)
+    rows, ranges = [], {}
     # Explicit bounded offline projection, batch in 10k rows to fixed four buckets.
     writers = {}
     counts = Counter()
@@ -187,7 +189,7 @@ def export_parquet(root, destination):
         rows.clear()
     sha = hashlib.sha256()
     try:
-        for rec in all_records(root):
+        for rec in all_records(root) if record_source is None else record_source:
             if rec.kind != "TAPE": continue
             market = rec.body["market"]
             bucket = int.from_bytes(hashlib.sha256(market.encode()).digest()[:4],"big")%4
@@ -200,7 +202,8 @@ def export_parquet(root, destination):
             row_bytes+=len(rec.frame)
             input_buckets[bucket].update(rec.frame)
             counts[rec.stream] += 1
-            ranges[rec.stream].append(rec.offset)
+            span=ranges.setdefault(rec.stream,{'first':rec.offset,'last':rec.offset,'count':0})
+            span['last']=rec.offset;span['count']+=1
             sha.update(rec.frame)
             if len(rows)>=10000:
                 flush()
@@ -224,7 +227,7 @@ def export_parquet(root, destination):
         raise ValueError("QUERY_RANGE_COUNT_MISMATCH")
     receipt = {"view":"tape_events","view_version":2,"status":"QUERY_EXPORT_COMMITTED",
         "records":input_count,"input_recordstream_sha256":sha.hexdigest(),
-        "ranges":{s:{"first":min(v),"last":max(v),"count":len(v)} for s,v in ranges.items()},
+        "ranges":ranges,
         "files":len(writers),"tape_frame_readback":"IDENTICAL"}
     atomic_json(destination/"query_commit.json",receipt)
     return receipt
