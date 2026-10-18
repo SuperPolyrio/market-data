@@ -15,6 +15,7 @@ sys.path[:0] = [str(PACKAGE/(".vendor312" if sys.version_info >= (3,12) else ".v
 from lobv2.catalog import discover
 from lobv2.journal import atomic_json
 from lobv2.node import run_node
+from lobv2.routing import plant_network
 from lobv2.wire import json_bytes
 
 
@@ -117,6 +118,7 @@ def enroll_locked(root, scope):
             if role in settings.get("lane_proxies",{}):
                 config["lane_proxies"] = settings["lane_proxies"][role]
             if role != "G":
+                config.update(plant_network(settings,index,role))
                 config["connection_rate_file"] = str(Path(settings["data_root"])/("connection-credit-"+role))
             if role == "G":
                 config["plants"] = {plant+"-"+name:{"host":"127.0.0.1","port":22000+index*3+off}

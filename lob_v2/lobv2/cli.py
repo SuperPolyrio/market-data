@@ -48,6 +48,7 @@ def main():
     p.add_argument("--lanes",type=int,choices=(1,2),default=2)
     p.add_argument("--capacity",type=int,default=250)
     p.add_argument("--faults",action="store_true")
+    p.add_argument("--routing-settings",help="Explicit production VPS routing settings for the live sample")
     args = parser.parse_args()
     if args.command == "discover":
         scope = asyncio.run(discover(args.market_limit,slugs=args.slug,pages=args.pages,events=args.events))

@@ -360,6 +360,11 @@ class FaultRelay:
 
 
 async def live_acceptance(args):
+    routing_settings = None
+    if getattr(args, "routing_settings", None):
+        routing_settings = json.loads(Path(args.routing_settings).read_bytes())
+        if args.lanes != 2 or (args.faults and os.getenv('LOBV2_TEST_SOCKS_UPSTREAM')):
+            raise ValueError("Explicit VPS routing requires two lanes and no single-upstream fault relay")
     root = Path(args.root).resolve()
     root.mkdir(parents=True,exist_ok=False)
     shutil.copyfile(args.scope,root/"scope.json")
@@ -384,6 +389,9 @@ async def live_acceptance(args):
         config = deepcopy(base)
         config["archive"]={"store_uri":str(root/"object-store"),"poll_seconds":2}
         config["listen"].update(port=ports[name],tls=tls)
+        if name != "G" and routing_settings:
+            from .routing import plant_network
+            config.update(plant_network(routing_settings, 0, name))
         if name!='G' and relays:config['lane_proxies']=['socks5://127.0.0.1:'+str(relays[name,lane].port) for lane in range(args.lanes)]
         if name=="G":
             config["plants"] = {p:{"host":"127.0.0.1","port":ports[p],"tls":tls} for p in ("P","Q")}
@@ -391,8 +399,10 @@ async def live_acceptance(args):
     start = time.monotonic_ns()
     atomic_json(root/"acceptance_config.json",{"start_mono_ns":start,"start_utc_ns":time.time_ns(),
         "duration_seconds":args.seconds,"lanes":args.lanes,"capacity":args.capacity,"faults":args.faults,
-        "host":platform.platform(),"python":sys.version,"network":"existing HTTPS_PROXY; official WS endpoint",
-        "failure_domains":"three processes on same host and same existing egress; no host independence claim",
+        "host":platform.platform(),"python":sys.version,
+        "network":"explicit production VPS proxies; official WS endpoint" if routing_settings else "existing HTTPS_PROXY; official WS endpoint",
+        "routing_settings":routing_settings,
+        "failure_domains":"three processes on one collector host; VPS identities recorded in routing_settings" if routing_settings else "three processes on same host and same existing egress; no host independence claim",
         "source_sha256":{str(p.relative_to(launcher_root())):hashlib.sha256(p.read_bytes()).hexdigest()
             for p in sorted([*launcher_root().glob("lobv2/*.py"),launcher_root()/"envelope.proto",launcher_root()/"requirements.lock"])} })
     processes,logs = {},{}
