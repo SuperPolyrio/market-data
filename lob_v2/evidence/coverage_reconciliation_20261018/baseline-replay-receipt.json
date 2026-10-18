@@ -1,0 +1,35 @@
+{
+  "status": "PASS",
+  "sample_type": "ACTUAL_ARCHIVED_PRODUCTION_FRAMES_OFFLINE_REPLAY",
+  "live_coverage_claim": false,
+  "results": [
+    {
+      "production_offset": 8,
+      "raw_sha256": "f91e1328982040cbd78211175e26ece8f50268ab8a1b80639a2bd85b86d23277",
+      "updated_tokens": [
+        "67331367954361188788149265886486011408491083394799651513510168062941721658776",
+        "107362719911697881901303637779798440992887894738149152664401365288015110067924"
+      ],
+      "previous_committed_book_preserved_before_sync": true,
+      "new_baseline_receipt_matches_after_sync": true
+    },
+    {
+      "production_offset": 81479,
+      "raw_sha256": "6f292730da966e8600b8d9be71a5b44ebf72b1a936b84d8f9a7b37c616d46a14",
+      "updated_tokens": [
+        "67331367954361188788149265886486011408491083394799651513510168062941721658776"
+      ],
+      "previous_committed_book_preserved_before_sync": true,
+      "new_baseline_receipt_matches_after_sync": true
+    },
+    {
+      "production_offset": 81485,
+      "raw_sha256": "a225218f3c1519cdc127e8328c845d7284d6315519a923e2c488c7a6c08339a5",
+      "updated_tokens": [
+        "107362719911697881901303637779798440992887894738149152664401365288015110067924"
+      ],
+      "previous_committed_book_preserved_before_sync": true,
+      "new_baseline_receipt_matches_after_sync": true
+    }
+  ]
+}

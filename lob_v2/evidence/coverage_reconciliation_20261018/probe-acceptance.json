@@ -1,0 +1,60 @@
+{
+  "contract": "RTT<=2000ms; late unique response fails its own probe; three new good probes required; overlaps stay ambiguous",
+  "results": [
+    {
+      "node": "P-0000",
+      "input_sha256": "f59b8c4f18dd2793059c9abcfd83f9dd739edf4cb9f807df8e57e6ff987fddd9",
+      "late_unique_responses": 10,
+      "verified_quality_decisions": 28,
+      "errors": [],
+      "same_connection_requalifications": [
+        {
+          "connection": "185e47d0-2cc4-469f-9b87-032fddade47d",
+          "failed_probe": {
+            "ping_offset": 13225,
+            "pong_offset": 13383,
+            "rtt_ms": 2769.76194
+          },
+          "requalified_record": 16901,
+          "last_good_pong_record": 16899,
+          "consecutive_good": 3,
+          "stream": "724fc603-7733-4fb9-b66c-936e8e026d37"
+        },
+        {
+          "connection": "af3aa694-434e-4cc0-9085-6e9babb27f61",
+          "failed_probe": {
+            "ping_offset": 27063,
+            "pong_offset": 27547,
+            "rtt_ms": 3169.923255
+          },
+          "requalified_record": 32163,
+          "last_good_pong_record": 32161,
+          "consecutive_good": 3,
+          "stream": "724fc603-7733-4fb9-b66c-936e8e026d37"
+        }
+      ]
+    },
+    {
+      "node": "Q-0001",
+      "input_sha256": "ea20e869465b98dddd83c75fcdacef353df8c31fd2c60994b86e38da0f78297a",
+      "late_unique_responses": 1,
+      "verified_quality_decisions": 23,
+      "errors": [],
+      "same_connection_requalifications": [
+        {
+          "connection": "aeb9f070-5228-4087-9876-d37c53f950d5",
+          "failed_probe": {
+            "ping_offset": 16722,
+            "pong_offset": 19071,
+            "rtt_ms": 5405.375823
+          },
+          "requalified_record": 26833,
+          "last_good_pong_record": 26831,
+          "consecutive_good": 3,
+          "stream": "ce34dcc7-359f-4732-a54c-afbf80ab1b15"
+        }
+      ]
+    }
+  ],
+  "status": "PASS"
+}

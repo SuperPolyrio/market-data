@@ -1,0 +1,12 @@
+{
+  "node": "Q-0087",
+  "previous_stream": "bfe96a1a-23be-4bf3-ad5f-706bd9a5d0dc",
+  "observed_ns": 1792312713331254593,
+  "previous_qualified_markets": 0,
+  "git_commit": "385ce221638129dc994b0f2488807bea463765d4",
+  "action": "RESTARTED_UNQUALIFIED",
+  "started_ns": 1792312713335663881,
+  "returncode": 0,
+  "stderr": "",
+  "finished_ns": 1792312717310401480
+}
