@@ -37,3 +37,15 @@ def test_rejects_lowercase_environment_override_and_external_bypass():
         guard.check_environment(env | {"https_proxy": "http://127.0.0.1:25172"}, "sun")
     with pytest.raises(ValueError):
         guard.check_environment(env | {"NO_PROXY": "*"}, "sun")
+
+
+def test_rejects_wrong_vps_labels_and_single_host_regression():
+    from test_routing import settings
+    config = settings()
+    route = guard.plant_network(config, 0, "P") | {"lanes": 2}
+    guard.check_assignment(route, config, "P-0000", "sun")
+    with pytest.raises(ValueError, match="ASSIGNMENT_MISMATCH"):
+        guard.check_assignment(route | {"lane_proxies": ["socks5h://127.0.0.1:18090"] * 2}, config, "P-0000", "sun")
+    config["vps_routes"][0]["proxies"]["P"] = "socks5h://127.0.0.1:18090"
+    with pytest.raises(ValueError, match="HOST_PORT_MISMATCH"):
+        guard.check_pool(config, "sun")

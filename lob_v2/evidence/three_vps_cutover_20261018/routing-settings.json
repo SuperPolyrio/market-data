@@ -1,0 +1,79 @@
+{
+  "archive": {
+    "evict_after_commit": true,
+    "poll_seconds": 10,
+    "ssh_store": {
+      "concurrency": 4,
+      "helper": "/mnt/polygon/lob-v2/bin/archive_receiver.py",
+      "host": "hy@10.7.7.223",
+      "identity_file": "/home/jiahuaiyu/.ssh/prediction_market_quant_xue_archive_ed25519",
+      "lock_root": "/data/jiahuaiyu/market-data/lob-v2/archive-locks",
+      "root": "/mnt/hdd22t/prediction-market-quant/lob_v2_archive"
+    }
+  },
+  "data_root": "/data/jiahuaiyu/market-data/lob-v2",
+  "discovery_seconds": 120,
+  "lane_proxies": {
+    "P": [
+      "socks5h://127.0.0.1:18463",
+      "socks5h://127.0.0.1:18090"
+    ],
+    "Q": [
+      "socks5h://127.0.0.1:18466",
+      "socks5h://127.0.0.1:18464"
+    ]
+  },
+  "markets_per_cohort": 4000,
+  "node_defaults": {
+    "assets_per_connection": 2000,
+    "backlog_reconnect_grace_seconds": 60,
+    "connections_per_second": 4,
+    "first_snapshot_timeout_seconds": 300,
+    "initial_pong_timeout_seconds": 300,
+    "lanes": 2,
+    "maximum_healthy_rtt_ms": 2000,
+    "maximum_receive_backlog_seconds": 30,
+    "metrics_digests": false,
+    "metrics_history": false,
+    "metrics_seconds": 30,
+    "minimum_free_bytes": 107374182400,
+    "open_timeout_seconds": 90,
+    "pong_timeout_seconds": 30,
+    "prefer_primary_lane": true,
+    "queue_bytes": 268435456,
+    "require_transport_proof": true,
+    "segment_bytes": 134217728,
+    "segment_seconds": 300,
+    "spool_max_bytes": 2147483648,
+    "transport_proof_max_age_seconds": 30
+  },
+  "proxies": {
+    "P": "socks5h://127.0.0.1:18463",
+    "Q": "socks5h://127.0.0.1:18466"
+  },
+  "fill_existing_cohorts": true,
+  "vps_routes": [
+    {
+      "host": "208.92.225.172",
+      "proxies": {
+        "P": "socks5h://127.0.0.1:18463",
+        "Q": "socks5h://127.0.0.1:18464"
+      }
+    },
+    {
+      "host": "179.254.94.224",
+      "proxies": {
+        "P": "socks5h://127.0.0.1:18090",
+        "Q": "socks5h://127.0.0.1:18091"
+      }
+    },
+    {
+      "host": "23.230.139.132",
+      "proxies": {
+        "P": "socks5h://127.0.0.1:18465",
+        "Q": "socks5h://127.0.0.1:18466"
+      }
+    }
+  ],
+  "routing_policy_version": "three_vps_rotating_cohort_v1"
+}

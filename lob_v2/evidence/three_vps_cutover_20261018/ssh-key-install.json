@@ -1,0 +1,20 @@
+{
+  "utc_ns": 1792308721815671295,
+  "results": [
+    {
+      "host": "208.92.225.172",
+      "exit_code": 0,
+      "result": "SCOPED_FORWARDING_KEY_PRESENT",
+      "error": "",
+      "ssh_port": 22
+    },
+    {
+      "host": "23.230.139.132",
+      "exit_code": 0,
+      "result": "SCOPED_FORWARDING_KEY_PRESENT",
+      "error": "",
+      "ssh_port": 22
+    }
+  ],
+  "permissions": "official endpoints port 443 only; no remote command, agent, PTY, or X11"
+}

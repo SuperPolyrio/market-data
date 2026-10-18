@@ -1,0 +1,12 @@
+[Unit]
+Description=LOB V2 dedicated Rabisu official-market SOCKS route %i
+After=network-online.target
+Wants=network-online.target
+[Service]
+EnvironmentFile=%h/.config/market-data/lob-v2-vps-%i.env
+ExecStart=/usr/bin/ssh -N -T -p 22 -D 127.0.0.1:${SOCKS_PORT} -i %h/.ssh/market_data_lob_v2 -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=%h/.ssh/market_data_lob_v2_known_hosts -o ExitOnForwardFailure=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -o ConnectTimeout=15 -o ControlMaster=no -o ControlPath=none -o IPQoS=none root@${VPS_HOST}
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+[Install]
+WantedBy=default.target

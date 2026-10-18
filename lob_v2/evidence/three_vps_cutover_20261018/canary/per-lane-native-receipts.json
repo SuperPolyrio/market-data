@@ -1,0 +1,50 @@
+{
+  "P": {
+    "0": {
+      "provider": "rabisu-208.92.225.172",
+      "proxy": "socks5h://127.0.0.1:18463",
+      "raw": 51,
+      "raw_bytes": 44288,
+      "pong": 11,
+      "price_change": 36,
+      "new_market": 1,
+      "book": 16,
+      "best_bid_ask": 2
+    },
+    "1": {
+      "provider": "rabisu-179.254.94.224",
+      "proxy": "socks5h://127.0.0.1:18090",
+      "raw": 51,
+      "raw_bytes": 44288,
+      "price_change": 36,
+      "pong": 11,
+      "new_market": 1,
+      "book": 16,
+      "best_bid_ask": 2
+    }
+  },
+  "Q": {
+    "0": {
+      "provider": "rabisu-23.230.139.132",
+      "proxy": "socks5h://127.0.0.1:18466",
+      "raw": 53,
+      "raw_bytes": 44839,
+      "book": 16,
+      "price_change": 37,
+      "pong": 12,
+      "best_bid_ask": 2,
+      "new_market": 1
+    },
+    "1": {
+      "provider": "rabisu-208.92.225.172",
+      "proxy": "socks5h://127.0.0.1:18464",
+      "raw": 52,
+      "raw_bytes": 44292,
+      "book": 16,
+      "price_change": 36,
+      "pong": 12,
+      "best_bid_ask": 2,
+      "new_market": 1
+    }
+  }
+}

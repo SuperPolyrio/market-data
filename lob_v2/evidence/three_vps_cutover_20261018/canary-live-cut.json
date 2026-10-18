@@ -1,0 +1,35 @@
+{
+  "P": {
+    "utc_ns": 1792308981952826136,
+    "stream": "291e66fe-a56a-4b00-98d6-462370249b15",
+    "raw_received": 80,
+    "parse_errors": 0,
+    "ready_tokens_by_lane": {
+      "0": 16,
+      "1": 16
+    },
+    "complete_markets": 8
+  },
+  "Q": {
+    "utc_ns": 1792308982040654580,
+    "stream": "36ac0381-76bd-44e2-aee4-5c5911b70d76",
+    "raw_received": 81,
+    "parse_errors": 0,
+    "ready_tokens_by_lane": {
+      "0": 16,
+      "1": 16
+    },
+    "complete_markets": 8
+  },
+  "G": {
+    "utc_ns": 1792308981516547001,
+    "stream": "8fd377e0-c7df-46da-9319-781d3a0a58b0",
+    "raw_received": 0,
+    "parse_errors": 0,
+    "ready_tokens_by_lane": {
+      "0": 0,
+      "1": 0
+    },
+    "complete_markets": 8
+  }
+}

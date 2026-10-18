@@ -1,0 +1,2338 @@
+{
+  "utc_ns": 1792309274971125799,
+  "time": "2026-10-18T15:41:16.645451+08:00",
+  "plants": 254,
+  "configuration_mismatches": [],
+  "environment_errors": [],
+  "provider_lane_assignments": {
+    "rabisu-208.92.225.172": 170,
+    "rabisu-179.254.94.224": 169,
+    "rabisu-23.230.139.132": 169
+  },
+  "unit_states": {
+    "active running": 254
+  },
+  "established_by_port": {
+    "18090": 19,
+    "18463": 11,
+    "18465": 23,
+    "18466": 13,
+    "18464": 23,
+    "18091": 6
+  },
+  "established_by_vps": {
+    "179.254.94.224": 25,
+    "208.92.225.172": 34,
+    "23.230.139.132": 36
+  },
+  "old_or_main_route_sockets": [],
+  "main_polymarket_connections": 0,
+  "native_book_token_observations_by_vps": {
+    "rabisu-179.254.94.224": 24471,
+    "rabisu-208.92.225.172": 29121,
+    "rabisu-23.230.139.132": 30809
+  },
+  "ready_token_observations_by_vps": {
+    "rabisu-179.254.94.224": 14518,
+    "rabisu-23.230.139.132": 27520,
+    "rabisu-208.92.225.172": 20532
+  },
+  "eligibility_reasons": {
+    "WAIT_HEALTHY_PONG": 27914,
+    "WAIT_NATIVE_BASELINE": 14157,
+    "BASELINE_EPOCH_MISMATCH": 14157,
+    "CAPTURE_PENDING_DURABLE": 14157,
+    "MARKET_PAIR_NOT_READY": 14178,
+    "SOURCE_ADMISSION_PENDING": 30620,
+    "CATALOG_TERMINAL_OR_EXCLUDED": 978,
+    "SUBSCRIPTION_NOT_WRITTEN": 1398
+  },
+  "plant_summaries": [
+    {
+      "node": "P-0000",
+      "stream": "30d737f0-308a-4de6-a8b0-c8c81412feba",
+      "utc_ns": 1792309250192686534,
+      "raw_bytes": 14788524,
+      "raw_received": 20346,
+      "published_markets": 250,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0001",
+      "stream": "dc098619-7d10-4df7-aa15-6961d4cbd4d7",
+      "utc_ns": 1792309248785447583,
+      "raw_bytes": 23933637,
+      "raw_received": 38213,
+      "published_markets": 250,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0002",
+      "stream": "2f41e64f-c5e7-404e-b2e8-cf3c6f873de8",
+      "utc_ns": 1792309252074864599,
+      "raw_bytes": 9173252,
+      "raw_received": 13009,
+      "published_markets": 250,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0003",
+      "stream": "765f348c-0fd3-4024-abc4-e375d4436842",
+      "utc_ns": 1792309248949212494,
+      "raw_bytes": 18978844,
+      "raw_received": 28298,
+      "published_markets": 250,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0004",
+      "stream": "2565d6c4-371a-46d0-8922-c035e3271b9a",
+      "utc_ns": 1792309250979795376,
+      "raw_bytes": 16378403,
+      "raw_received": 25730,
+      "published_markets": 249,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0005",
+      "stream": "09916333-5def-4025-b841-878f28adcce1",
+      "utc_ns": 1792309251153884463,
+      "raw_bytes": 21018890,
+      "raw_received": 33562,
+      "published_markets": 250,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0006",
+      "stream": "36d21678-fb89-4123-a692-7b19c5191e88",
+      "utc_ns": 1792309248770776277,
+      "raw_bytes": 20095715,
+      "raw_received": 31402,
+      "published_markets": 250,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0007",
+      "stream": "18a4a21e-32b3-4a9e-ba66-e6190663d25b",
+      "utc_ns": 1792309250209083693,
+      "raw_bytes": 17159068,
+      "raw_received": 26943,
+      "published_markets": 220,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0008",
+      "stream": "e556fd1e-f848-41ab-aa20-189acf1ddaaf",
+      "utc_ns": 1792309250175144732,
+      "raw_bytes": 9159031,
+      "raw_received": 15448,
+      "published_markets": 722,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0009",
+      "stream": "84141520-30da-413c-a81e-482028943f05",
+      "utc_ns": 1792309248576567797,
+      "raw_bytes": 4878712,
+      "raw_received": 5447,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0010",
+      "stream": "25396f71-1ace-4410-af1c-df1bf53d949b",
+      "utc_ns": 1792309250863543721,
+      "raw_bytes": 4251047,
+      "raw_received": 6956,
+      "published_markets": 686,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0011",
+      "stream": "6823b3f9-8b41-4279-b8d6-1ac2ad6cb2cc",
+      "utc_ns": 1792309252893986990,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0012",
+      "stream": "3add0f48-c240-4324-b755-ee2467e67297",
+      "utc_ns": 1792309252706275350,
+      "raw_bytes": 2897238,
+      "raw_received": 3387,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0013",
+      "stream": "8d20ce72-47c8-4405-9c35-d5ad65ff3391",
+      "utc_ns": 1792309253593126412,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0014",
+      "stream": "37094c5f-6372-48b6-a69e-63d23173188d",
+      "utc_ns": 1792309253770528528,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0015",
+      "stream": "e94ab9e1-c417-4d5c-b638-3165386eff68",
+      "utc_ns": 1792309253478870493,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0016",
+      "stream": "b493f32c-26dc-428c-abff-44992cb935fc",
+      "utc_ns": 1792309250977956965,
+      "raw_bytes": 3155942,
+      "raw_received": 4064,
+      "published_markets": 690,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0017",
+      "stream": "e210a1b2-1b2b-4f02-b3cd-050d1d0d1f06",
+      "utc_ns": 1792309250446755569,
+      "raw_bytes": 2071836,
+      "raw_received": 2051,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0018",
+      "stream": "0fe236bb-e5e1-4a63-8391-abb67bc2c7ad",
+      "utc_ns": 1792309250706093970,
+      "raw_bytes": 5093187,
+      "raw_received": 6337,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0019",
+      "stream": "f3698b01-9f3b-4220-a94a-2140d981908f",
+      "utc_ns": 1792309250080475896,
+      "raw_bytes": 5290127,
+      "raw_received": 8056,
+      "published_markets": 678,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0020",
+      "stream": "d5b5b904-bdb1-413c-8940-d11a3a9125fc",
+      "utc_ns": 1792309253440962949,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0021",
+      "stream": "5b802b7a-b51d-4978-a910-e11153b274b9",
+      "utc_ns": 1792309256237773367,
+      "raw_bytes": 510011,
+      "raw_received": 548,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0022",
+      "stream": "63e87029-d412-4721-ac37-514ec6c08c40",
+      "utc_ns": 1792309250893801433,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0023",
+      "stream": "e007a82b-af3a-4e1d-a112-e4002091477f",
+      "utc_ns": 1792309253282027882,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0024",
+      "stream": "9869f6ce-ca09-415f-a297-7ee795bb32c9",
+      "utc_ns": 1792309251652641890,
+      "raw_bytes": 1098762,
+      "raw_received": 236,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0025",
+      "stream": "e62a3761-a846-4afc-833e-213b542e8af7",
+      "utc_ns": 1792309250981684524,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0026",
+      "stream": "718f2992-a854-468d-9cf5-9671ca99b449",
+      "utc_ns": 1792309255436449294,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0027",
+      "stream": "9cdbd4a4-2228-4c2a-8bd5-194aaf652c67",
+      "utc_ns": 1792309255805918716,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0028",
+      "stream": "1c2bed08-30c4-400a-ae4e-d06e951c75a5",
+      "utc_ns": 1792309255831037642,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0029",
+      "stream": "a4163a3e-276e-4172-9632-3a0cb66e979e",
+      "utc_ns": 1792309253146838733,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0030",
+      "stream": "38fd9a27-de6c-40c1-85dd-233746f0d804",
+      "utc_ns": 1792309254144434251,
+      "raw_bytes": 1663552,
+      "raw_received": 1343,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0031",
+      "stream": "b976e272-2b89-4843-b702-908bd72f02d9",
+      "utc_ns": 1792309253946029468,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0032",
+      "stream": "06ca5692-0197-43f5-b8f0-065a5e2539cc",
+      "utc_ns": 1792309255489728627,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0033",
+      "stream": "b9436951-7621-48e2-80a9-cde3f52f8c40",
+      "utc_ns": 1792309256106552255,
+      "raw_bytes": 1337680,
+      "raw_received": 690,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0034",
+      "stream": "52ae45c5-88de-454f-bd7c-77a81781f920",
+      "utc_ns": 1792309258076681734,
+      "raw_bytes": 1837298,
+      "raw_received": 1469,
+      "published_markets": 707,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0035",
+      "stream": "18ed8bc3-96f8-4a63-9048-3c61993b2df2",
+      "utc_ns": 1792309253973487222,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0036",
+      "stream": "73f16ef0-97df-42a1-a1cf-26f382717c35",
+      "utc_ns": 1792309258002224538,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0037",
+      "stream": "7d882bc7-b9ca-4d50-a43c-ff87bc872c1f",
+      "utc_ns": 1792309255194946770,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0038",
+      "stream": "d98ee469-6908-412a-bd42-fac43d0fad5e",
+      "utc_ns": 1792309254824635763,
+      "raw_bytes": 2681137,
+      "raw_received": 3984,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0039",
+      "stream": "218c24a8-2274-4cd1-89ba-bb0614783ed4",
+      "utc_ns": 1792309258000419736,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0040",
+      "stream": "51969a09-df86-4926-8f55-ae61afb1ba74",
+      "utc_ns": 1792309258628737800,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0041",
+      "stream": "4aab0c72-8164-454c-8837-06afbaab82cb",
+      "utc_ns": 1792309256368617864,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0042",
+      "stream": "5e901cc3-00b4-46dc-b6af-c322cd4af879",
+      "utc_ns": 1792309257695329132,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0043",
+      "stream": "dd0efcc0-9f43-4ac9-8efe-768f7c345778",
+      "utc_ns": 1792309258635099272,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0044",
+      "stream": "d6763594-2c8e-47a7-b795-59db018cf7b1",
+      "utc_ns": 1792309256993922681,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0045",
+      "stream": "35509716-6658-409b-91ba-08587d66d99e",
+      "utc_ns": 1792309257072107464,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0046",
+      "stream": "7a7e9145-8658-4c49-a6a7-fef52609556a",
+      "utc_ns": 1792309259860635656,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0047",
+      "stream": "35fae8c8-247f-42ee-a29d-788efb35aaef",
+      "utc_ns": 1792309258451082690,
+      "raw_bytes": 3114488,
+      "raw_received": 3164,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0048",
+      "stream": "4534df5a-f9c4-4812-91e5-6755eba87a29",
+      "utc_ns": 1792309258756801934,
+      "raw_bytes": 5120327,
+      "raw_received": 6036,
+      "published_markets": 1383,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0049",
+      "stream": "a4e05be6-108e-4616-aa4c-cdb94bb90f79",
+      "utc_ns": 1792309256756518283,
+      "raw_bytes": 8554598,
+      "raw_received": 14703,
+      "published_markets": 699,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0050",
+      "stream": "6c3a47e8-faba-480f-aebf-55c74df73869",
+      "utc_ns": 1792309258992834603,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0051",
+      "stream": "efe412c2-04f2-46d9-88f0-de7730f0ef63",
+      "utc_ns": 1792309258813593258,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0052",
+      "stream": "abbd6fc1-c2ac-4e93-985f-bd2a228cf802",
+      "utc_ns": 1792309258564225780,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0053",
+      "stream": "22f01758-ae39-4d06-a2a6-40cd68d2ae21",
+      "utc_ns": 1792309259053749331,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0054",
+      "stream": "020cb89f-620c-4483-a873-9a3f42a41bb5",
+      "utc_ns": 1792309261796222937,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0055",
+      "stream": "9260fd44-0fe7-473a-8548-bcadb29c2cd1",
+      "utc_ns": 1792309258516916378,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0056",
+      "stream": "4ee88501-5474-4013-9d91-e0108a978ba7",
+      "utc_ns": 1792309260548145753,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0057",
+      "stream": "29d7928f-eb0c-498a-924c-41f9ef34b0c0",
+      "utc_ns": 1792309261610995296,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0058",
+      "stream": "06056843-20e5-4ec5-82d6-87c8e08a3f49",
+      "utc_ns": 1792309259800418452,
+      "raw_bytes": 8744082,
+      "raw_received": 12195,
+      "published_markets": 1394,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0059",
+      "stream": "ea943c5c-c532-4834-800a-9392e8f21a51",
+      "utc_ns": 1792309258560889967,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0060",
+      "stream": "8be9f2a1-44de-482d-9224-aa9f2866600f",
+      "utc_ns": 1792309263818934536,
+      "raw_bytes": 4014202,
+      "raw_received": 5731,
+      "published_markets": 700,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0061",
+      "stream": "43a85423-2ba6-491f-8bcf-2a5a4899f940",
+      "utc_ns": 1792309261200795050,
+      "raw_bytes": 6887410,
+      "raw_received": 9595,
+      "published_markets": 719,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0062",
+      "stream": "6a2cd4e8-e608-42ae-a7a8-e4f53dfa7763",
+      "utc_ns": 1792309262924820756,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0063",
+      "stream": "538612b1-ffad-413f-8b70-3c61ac55c5e6",
+      "utc_ns": 1792309262168056257,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0064",
+      "stream": "601ce20f-5e80-4e87-8cbd-e200aca0a22e",
+      "utc_ns": 1792309260784849190,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0065",
+      "stream": "2a9db4ef-7518-4ecd-b68f-ba20a8b8f464",
+      "utc_ns": 1792309263939499683,
+      "raw_bytes": 4948311,
+      "raw_received": 7388,
+      "published_markets": 717,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0066",
+      "stream": "fa15ca1f-085c-4c1c-815a-f0ba12b73539",
+      "utc_ns": 1792309262728965060,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0067",
+      "stream": "210bb54f-b972-4f1e-8ce5-a0c94c50c1be",
+      "utc_ns": 1792309263712355735,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0068",
+      "stream": "f23cea27-2c0c-494e-9129-6bb87d6ef52e",
+      "utc_ns": 1792309260965417692,
+      "raw_bytes": 2015323,
+      "raw_received": 1805,
+      "published_markets": 697,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0069",
+      "stream": "e6ebca36-b29b-4b9f-8eb8-8cbbec77218d",
+      "utc_ns": 1792309259743372966,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0070",
+      "stream": "54957390-f14c-471e-b458-1d3c615ca8bb",
+      "utc_ns": 1792309264173806528,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0071",
+      "stream": "a566d97f-f568-4dd8-84bc-f53e13f746c6",
+      "utc_ns": 1792309266127838353,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0072",
+      "stream": "e3a7859e-59aa-4a0c-84e7-87efe9573980",
+      "utc_ns": 1792309262863114147,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0073",
+      "stream": "57a42eb1-369b-468d-80b2-c413cc7857e9",
+      "utc_ns": 1792309262299307246,
+      "raw_bytes": 3519204,
+      "raw_received": 4668,
+      "published_markets": 700,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0074",
+      "stream": "02aad02d-2f3a-4b1c-a48f-83aaa8625680",
+      "utc_ns": 1792309262318165786,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0075",
+      "stream": "b6688b33-892e-4b40-a335-4851992e976a",
+      "utc_ns": 1792309263291031534,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0076",
+      "stream": "df58b14c-1108-4177-80a8-d5a676520335",
+      "utc_ns": 1792309261385406769,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0077",
+      "stream": "8db70994-28ca-42db-aada-fe793d4c4f0e",
+      "utc_ns": 1792309262632495936,
+      "raw_bytes": 2891856,
+      "raw_received": 3295,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0078",
+      "stream": "cfb48882-4ce0-4e86-b84d-30beca361570",
+      "utc_ns": 1792309262840179917,
+      "raw_bytes": 3376803,
+      "raw_received": 4584,
+      "published_markets": 706,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0079",
+      "stream": "e0f016ec-b616-43f6-881a-d26f393d97e1",
+      "utc_ns": 1792309262979379074,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0080",
+      "stream": "4908882c-f15c-4180-9580-ff26f48aa1fe",
+      "utc_ns": 1792309264311866728,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0081",
+      "stream": "4e2db72a-5db6-402c-ae6f-69434f384b97",
+      "utc_ns": 1792309265371151961,
+      "raw_bytes": 3865796,
+      "raw_received": 4980,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0082",
+      "stream": "9a3c7b8e-3345-4a74-ad96-08d8485cf438",
+      "utc_ns": 1792309266321956330,
+      "raw_bytes": 1054374,
+      "raw_received": 183,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0083",
+      "stream": "7f7ed9a7-d67f-453f-9fa8-21c524ac4ce7",
+      "utc_ns": 1792309265467589056,
+      "raw_bytes": 3383429,
+      "raw_received": 4268,
+      "published_markets": 707,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0084",
+      "stream": "801d708c-6cc4-45b3-ba61-6e57eb0e57a1",
+      "utc_ns": 1792309264247387776,
+      "raw_bytes": 1350130,
+      "raw_received": 733,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0085",
+      "stream": "8bf326c6-4aa7-4d32-ab68-49772e241deb",
+      "utc_ns": 1792309263387159340,
+      "raw_bytes": 75167,
+      "raw_received": 51,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0086",
+      "stream": "8c88385f-fa7b-4f2a-9f5c-3e8620631b1a",
+      "utc_ns": 1792309263979406380,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0087",
+      "stream": "39d95444-9161-4bfd-8598-3398c46cba5e",
+      "utc_ns": 1792309266035308014,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0088",
+      "stream": "5250a09c-f346-459d-9bac-27a824e32484",
+      "utc_ns": 1792309263930117378,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0089",
+      "stream": "e0c9f623-70c4-4173-86bd-c1e841f914b4",
+      "utc_ns": 1792309266974375210,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0090",
+      "stream": "47562164-ba8d-4f22-b8c5-5d5111d91bf2",
+      "utc_ns": 1792309265306934108,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0091",
+      "stream": "d4cab536-e593-46eb-9d05-f096449213bb",
+      "utc_ns": 1792309268005941227,
+      "raw_bytes": 690809,
+      "raw_received": 184,
+      "published_markets": 187,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0092",
+      "stream": "decb0194-3917-483a-a550-ebcb8e238917",
+      "utc_ns": 1792309265013768504,
+      "raw_bytes": 149723,
+      "raw_received": 76,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0093",
+      "stream": "c75d05b3-8baf-42d4-852b-743f6e4b732a",
+      "utc_ns": 1792309266131771291,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0094",
+      "stream": "4b99c9e8-240d-42f2-abaa-a01a2007ce7d",
+      "utc_ns": 1792309265200189413,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0095",
+      "stream": "9678cc75-7143-4271-b586-f2de5a224c5e",
+      "utc_ns": 1792309267416458536,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0096",
+      "stream": "198c705c-83f2-43ea-b929-1eeac89c90a2",
+      "utc_ns": 1792309266725700841,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0097",
+      "stream": "6574f818-d8a6-49d0-9410-3677e2673f88",
+      "utc_ns": 1792309266120405275,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0098",
+      "stream": "0f5a001d-e3b7-4594-afc1-897aed652f1f",
+      "utc_ns": 1792309268031409184,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0099",
+      "stream": "273870a0-b8c2-40d1-93a2-968ff24ff03c",
+      "utc_ns": 1792309269731154454,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0100",
+      "stream": "9c4137b6-9f8d-4881-891b-b4bd507d10ec",
+      "utc_ns": 1792309268306007597,
+      "raw_bytes": 409501,
+      "raw_received": 100,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0101",
+      "stream": "857e20a2-46fc-40b7-b4d7-1a5407d70616",
+      "utc_ns": 1792309268066971914,
+      "raw_bytes": 139592,
+      "raw_received": 42,
+      "published_markets": 16,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0102",
+      "stream": "8848bb9a-08db-4d04-aaf7-2cc605e89f55",
+      "utc_ns": 1792309268544629942,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0103",
+      "stream": "a6ad4c86-9dbf-4b32-9694-6113b735c998",
+      "utc_ns": 1792309271151312329,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0104",
+      "stream": "533f81ed-267c-4799-84e1-382b34f4f99f",
+      "utc_ns": 1792309271010178340,
+      "raw_bytes": 4973025,
+      "raw_received": 7709,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0105",
+      "stream": "27dccd36-5f67-4419-8920-b7407b2c98cc",
+      "utc_ns": 1792309269926690902,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0106",
+      "stream": "234ceec1-88d5-47b7-bbc9-cb180ec2b5b2",
+      "utc_ns": 1792309267577344900,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0107",
+      "stream": "a549f673-2317-4b74-8f8c-313c53814425",
+      "utc_ns": 1792309268912652758,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0108",
+      "stream": "1eb1e5fa-c61a-4619-bb19-2a22b3833f9a",
+      "utc_ns": 1792309269369123468,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0109",
+      "stream": "a1459abf-c5e4-41bf-b406-7a2045c1ceb2",
+      "utc_ns": 1792309269305082192,
+      "raw_bytes": 1781302,
+      "raw_received": 1904,
+      "published_markets": 422,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0110",
+      "stream": "434029df-7123-487e-9f92-eb755c52452f",
+      "utc_ns": 1792309273718510608,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0111",
+      "stream": "1c94544c-08fc-43dd-8f6b-54c9816a95b8",
+      "utc_ns": 1792309272036062180,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0112",
+      "stream": "498ae919-bbe6-48a6-aa4f-2dce1a2080e4",
+      "utc_ns": 1792309272890963075,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0113",
+      "stream": "e306d1e2-6470-41a4-9303-73682c393e20",
+      "utc_ns": 1792309270889270165,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0114",
+      "stream": "278313ff-bd07-49e3-a29c-dfa759b7c8d9",
+      "utc_ns": 1792309272532677115,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0115",
+      "stream": "d25641b0-8cdc-4e66-a088-11ec2f55efd9",
+      "utc_ns": 1792309272751526463,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0116",
+      "stream": "73ba94a9-bc07-4688-9278-9cf7f02fb065",
+      "utc_ns": 1792309272798733100,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0117",
+      "stream": "84ad2e19-e8a9-41bc-a9a6-468b31a72057",
+      "utc_ns": 1792309272703118597,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0118",
+      "stream": "3be3924c-4caa-44a3-a58c-02e94f351fec",
+      "utc_ns": 1792309272861782176,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0119",
+      "stream": "2e7b69ab-f86c-4ebe-9bdf-c91f627f62ac",
+      "utc_ns": 1792309271995637337,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0120",
+      "stream": "408b4c79-f44c-43f8-addb-0022b4aa6b36",
+      "utc_ns": 1792309274415463007,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0121",
+      "stream": "8cbc1cd8-7659-44c0-a111-ecc46f990ea0",
+      "utc_ns": 1792309274483711892,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0122",
+      "stream": "94040ad2-703b-4a74-ba6f-9fe11a7afd4e",
+      "utc_ns": 1792309274129800791,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0123",
+      "stream": "716d2d27-9f2f-4651-8e3e-9c429de4c49d",
+      "utc_ns": 1792309246108407049,
+      "raw_bytes": 559341,
+      "raw_received": 367,
+      "published_markets": 243,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0124",
+      "stream": "79f30b99-565b-43bb-ac95-746073ea2efb",
+      "utc_ns": 1792309271122057921,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0125",
+      "stream": "edc0cf89-e1aa-488c-bbe9-ded0c11fb8b7",
+      "utc_ns": 1792309274955064471,
+      "raw_bytes": 1336489,
+      "raw_received": 569,
+      "published_markets": 1000,
+      "parse_errors": 0
+    },
+    {
+      "node": "P-0126",
+      "stream": "f202f312-bde9-466e-8b2b-fb7a2f2380e2",
+      "utc_ns": 1792309271955955677,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0000",
+      "stream": "df12850d-c0ae-4252-b3e0-da0d4d923d18",
+      "utc_ns": 1792309274615202926,
+      "raw_bytes": 17556032,
+      "raw_received": 24670,
+      "published_markets": 250,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0001",
+      "stream": "2675d28a-94ec-48a1-b8b7-ca3e1d34e0db",
+      "utc_ns": 1792309275109596426,
+      "raw_bytes": 27746097,
+      "raw_received": 41027,
+      "published_markets": 250,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0002",
+      "stream": "24d7f7f3-8427-401b-a75a-299e9d345e1e",
+      "utc_ns": 1792309248871116464,
+      "raw_bytes": 6412847,
+      "raw_received": 8218,
+      "published_markets": 250,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0003",
+      "stream": "63d245ec-e8ff-4465-a56c-f1ba4757d6fa",
+      "utc_ns": 1792309275714674402,
+      "raw_bytes": 14855052,
+      "raw_received": 22799,
+      "published_markets": 250,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0004",
+      "stream": "d31b3a2d-3c95-4041-81cb-74b947b4cf6e",
+      "utc_ns": 1792309246008130482,
+      "raw_bytes": 5533647,
+      "raw_received": 8144,
+      "published_markets": 249,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0005",
+      "stream": "621fe0fe-5aec-4a25-b3b9-239bfe9b54c4",
+      "utc_ns": 1792309246276016093,
+      "raw_bytes": 8143565,
+      "raw_received": 13105,
+      "published_markets": 250,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0006",
+      "stream": "08aad076-fbc7-4900-8736-b4dd2eae8695",
+      "utc_ns": 1792309246716850418,
+      "raw_bytes": 13272386,
+      "raw_received": 20540,
+      "published_markets": 250,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0007",
+      "stream": "760a5fa0-d4d4-40b5-b1f8-39486cf927fa",
+      "utc_ns": 1792309275553014003,
+      "raw_bytes": 12068845,
+      "raw_received": 16635,
+      "published_markets": 220,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0008",
+      "stream": "4378cb49-8594-46c5-8d78-5cca47b0f9fd",
+      "utc_ns": 1792309275921172325,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0009",
+      "stream": "2dc52c18-793f-4b3a-abc1-19d2ac42f44e",
+      "utc_ns": 1792309273594528941,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0010",
+      "stream": "da12fef2-d710-4849-951e-8195ec34e967",
+      "utc_ns": 1792309247160793690,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0011",
+      "stream": "542197b7-0e72-4186-a5d9-5180721f3933",
+      "utc_ns": 1792309249762421551,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0012",
+      "stream": "7daee730-2d85-449d-b7c7-7c0abee45851",
+      "utc_ns": 1792309249586179542,
+      "raw_bytes": 2416181,
+      "raw_received": 888,
+      "published_markets": 672,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0013",
+      "stream": "4a49caf9-2ac3-4007-883b-57f517449054",
+      "utc_ns": 1792309246250109696,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0014",
+      "stream": "3f6d6fbd-c16f-4f1e-b0d9-149fd20f4084",
+      "utc_ns": 1792309248781467727,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0015",
+      "stream": "3cfbb53d-ea3d-4852-b24a-f184cf1963f3",
+      "utc_ns": 1792309250673605830,
+      "raw_bytes": 1541750,
+      "raw_received": 871,
+      "published_markets": 699,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0016",
+      "stream": "aeacc287-002c-40ed-8128-4bfbf07a4e90",
+      "utc_ns": 1792309250246055813,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0017",
+      "stream": "1bc17ddb-a722-4245-99ed-fccbc6504d48",
+      "utc_ns": 1792309247050958577,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0018",
+      "stream": "4c6c6103-4738-4b5e-9bad-7b89688f75b0",
+      "utc_ns": 1792309248740279369,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0019",
+      "stream": "c15412b3-8729-4a3d-b23a-aed3822f05a5",
+      "utc_ns": 1792309250398551560,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0020",
+      "stream": "0e966756-6ad7-4768-81f2-7c5c35f93566",
+      "utc_ns": 1792309248968968629,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0021",
+      "stream": "24764546-cfbf-48f2-95d2-e578bf9841ba",
+      "utc_ns": 1792309249095475207,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0022",
+      "stream": "11cf6a9d-81f5-44a6-a9f4-8a531cfc48fd",
+      "utc_ns": 1792309249071488791,
+      "raw_bytes": 10331723,
+      "raw_received": 14879,
+      "published_markets": 1390,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0023",
+      "stream": "e217f28b-8e5b-4711-8f0e-7a7de1951b65",
+      "utc_ns": 1792309250842324706,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0024",
+      "stream": "889c2285-bb44-47ed-b0f4-68444b8c50fa",
+      "utc_ns": 1792309248078678114,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0025",
+      "stream": "39fb5287-2320-4a85-ae90-1133ecd8565e",
+      "utc_ns": 1792309251674639671,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0026",
+      "stream": "d345b7d6-7fe8-4c7d-bc63-dc6a2fa7fd27",
+      "utc_ns": 1792309249668549230,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0027",
+      "stream": "22743d6e-de0f-4dbf-86d5-1725bf23088c",
+      "utc_ns": 1792309251061235226,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0028",
+      "stream": "f86a2d0d-29c5-401a-8001-9e67f3d003b1",
+      "utc_ns": 1792309251589974393,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0029",
+      "stream": "9c949761-dec3-4194-b998-85892a053ad6",
+      "utc_ns": 1792309249280775361,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0030",
+      "stream": "34565a52-eaa8-48b6-93a7-c3c399c3b51e",
+      "utc_ns": 1792309254804708269,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0031",
+      "stream": "7f75c267-cb39-47e5-9fa5-ee5a3bce798f",
+      "utc_ns": 1792309250947839844,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0032",
+      "stream": "fc36e727-e509-4a75-8a59-b9e06a99ef99",
+      "utc_ns": 1792309252803483973,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0033",
+      "stream": "0dd1c429-a693-479c-8b75-32447a9113b4",
+      "utc_ns": 1792309252123313448,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0034",
+      "stream": "b660c4cb-9422-4a0f-8a4e-313362f63987",
+      "utc_ns": 1792309254358703360,
+      "raw_bytes": 5243042,
+      "raw_received": 8040,
+      "published_markets": 684,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0035",
+      "stream": "844acaa4-0a68-45a2-8e2c-9bd2a7b59474",
+      "utc_ns": 1792309249302279902,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0036",
+      "stream": "da34d129-9daf-4d8f-a130-33823b91a786",
+      "utc_ns": 1792309254052388149,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0037",
+      "stream": "c6c6b889-1bad-4070-a4bb-b519013bd6b6",
+      "utc_ns": 1792309251125140115,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0038",
+      "stream": "5696f57f-a5ba-41c3-b83a-47ed0cd89097",
+      "utc_ns": 1792309253920151709,
+      "raw_bytes": 4791842,
+      "raw_received": 7477,
+      "published_markets": 343,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0039",
+      "stream": "9df196b9-74b3-447c-a027-e6e36d05f905",
+      "utc_ns": 1792309252545581225,
+      "raw_bytes": 2757133,
+      "raw_received": 3198,
+      "published_markets": 691,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0040",
+      "stream": "ce562efe-6bf3-42f2-a51b-a606ac1a4839",
+      "utc_ns": 1792309254173166374,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0041",
+      "stream": "0905ce26-98cf-4635-9e4d-e316a5173c8a",
+      "utc_ns": 1792309253144333364,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0042",
+      "stream": "07740660-3a19-4d70-8792-4a898037428f",
+      "utc_ns": 1792309253715846609,
+      "raw_bytes": 5852924,
+      "raw_received": 7320,
+      "published_markets": 677,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0043",
+      "stream": "0f97154d-de59-4c1e-9515-b56d98e77f76",
+      "utc_ns": 1792309254153508382,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0044",
+      "stream": "eeb8da18-0e9f-454f-9b92-f6362901f0a9",
+      "utc_ns": 1792309252833024343,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0045",
+      "stream": "35ccec51-aeb0-4598-9989-e94d83ffd2ee",
+      "utc_ns": 1792309253559547296,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0046",
+      "stream": "975a7d97-ca2f-4e12-b583-112df727edad",
+      "utc_ns": 1792309254841580043,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0047",
+      "stream": "1d22f4d4-f7f3-4342-a6e6-bb8d53205fcb",
+      "utc_ns": 1792309253630310463,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0048",
+      "stream": "1eae7222-0f37-4a1c-ba85-70b27db1f39e",
+      "utc_ns": 1792309253391702364,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0049",
+      "stream": "9989420a-cc48-434e-9c01-a447a87de721",
+      "utc_ns": 1792309253107552757,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0050",
+      "stream": "06e763d0-193f-43e0-b1de-1b51ae82ea63",
+      "utc_ns": 1792309254993884722,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0051",
+      "stream": "7766a486-318a-4feb-b6aa-e88e309fe8a8",
+      "utc_ns": 1792309258863443153,
+      "raw_bytes": 7380452,
+      "raw_received": 10992,
+      "published_markets": 683,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0052",
+      "stream": "11f8d0da-31b9-49a6-8a9f-ba84070e7ee2",
+      "utc_ns": 1792309254713976384,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0053",
+      "stream": "e5f72ed2-9931-4626-927f-f6bb5da9f0a1",
+      "utc_ns": 1792309254643055199,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0054",
+      "stream": "29c4eb79-b002-4f7f-84cd-362a1d640fda",
+      "utc_ns": 1792309255354728363,
+      "raw_bytes": 5610064,
+      "raw_received": 4648,
+      "published_markets": 1391,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0055",
+      "stream": "42da7260-f9c7-471f-aea9-c955f74ecb79",
+      "utc_ns": 1792309254688597580,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0056",
+      "stream": "2578c914-9a05-49ee-8ffd-fc9939d0731b",
+      "utc_ns": 1792309256233001384,
+      "raw_bytes": 2193880,
+      "raw_received": 2026,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0057",
+      "stream": "1e8d201d-6fae-49af-b224-75f9e7436644",
+      "utc_ns": 1792309256771545274,
+      "raw_bytes": 4758770,
+      "raw_received": 6986,
+      "published_markets": 708,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0058",
+      "stream": "aa64d4ef-9b83-4a10-aded-cc03069824ce",
+      "utc_ns": 1792309254859199243,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0059",
+      "stream": "22030088-f72c-4531-a048-c7f05a0bc399",
+      "utc_ns": 1792309255055356316,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0060",
+      "stream": "bf453582-5385-475f-8d22-eeed10d374aa",
+      "utc_ns": 1792309257340904006,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0061",
+      "stream": "a941c37d-5900-4370-93ad-e0f743ac4201",
+      "utc_ns": 1792309256599432700,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0062",
+      "stream": "84663c98-4ae9-4df6-8257-7841fcd5f5c7",
+      "utc_ns": 1792309258950747007,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0063",
+      "stream": "d1435aef-4717-4487-8143-ffe4ce50658c",
+      "utc_ns": 1792309258360419797,
+      "raw_bytes": 3437805,
+      "raw_received": 4309,
+      "published_markets": 671,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0064",
+      "stream": "09674d88-e17b-4641-b134-bca3b8499ca6",
+      "utc_ns": 1792309256464981624,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0065",
+      "stream": "304819a2-ab85-48a8-b1af-2a8dd3acaff1",
+      "utc_ns": 1792309257445485148,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0066",
+      "stream": "b9f72f07-072e-4889-8740-da33ffee1efa",
+      "utc_ns": 1792309259627044935,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0067",
+      "stream": "32d665cc-1bb1-4886-ac22-b0c62db687f4",
+      "utc_ns": 1792309257886915819,
+      "raw_bytes": 1300213,
+      "raw_received": 617,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0068",
+      "stream": "3d31fa1b-7933-4fc8-86f1-c8a6896dab9c",
+      "utc_ns": 1792309257174906659,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0069",
+      "stream": "c9249e72-4f15-4525-922c-2f8b084f24a3",
+      "utc_ns": 1792309257233107792,
+      "raw_bytes": 1082135,
+      "raw_received": 1256,
+      "published_markets": 190,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0070",
+      "stream": "2527d0c8-ddf2-4828-8e47-e4de610d613a",
+      "utc_ns": 1792309259648584476,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0071",
+      "stream": "63ebbcf4-68cf-4f11-b757-fc7ab509f5a7",
+      "utc_ns": 1792309259168517246,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0072",
+      "stream": "9f7a9bf4-083e-4a04-9465-be1b8ba9446d",
+      "utc_ns": 1792309261542337614,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0073",
+      "stream": "eb0dc216-c2bd-4cbd-b993-c74686262a58",
+      "utc_ns": 1792309259225946567,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0074",
+      "stream": "21bdc115-2adf-4d0a-8a45-67c76458dce9",
+      "utc_ns": 1792309258887847751,
+      "raw_bytes": 2076638,
+      "raw_received": 1930,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0075",
+      "stream": "1b021b29-e37e-4a06-bbdf-14c7ec7c31ec",
+      "utc_ns": 1792309260183804113,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0076",
+      "stream": "f7404f0c-33c4-4dec-99b5-300dae9ca424",
+      "utc_ns": 1792309258934747620,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0077",
+      "stream": "c0ef28dd-2709-4d44-bd93-6dc74f083180",
+      "utc_ns": 1792309258640540336,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0078",
+      "stream": "28bcf6f5-4c36-4ee8-b914-dce30a825692",
+      "utc_ns": 1792309261603897792,
+      "raw_bytes": 4187256,
+      "raw_received": 6093,
+      "published_markets": 706,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0079",
+      "stream": "bf779acd-11ba-4b87-a604-0cc0d5c67783",
+      "utc_ns": 1792309258762052623,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0080",
+      "stream": "e05840db-af58-4965-9790-a6347dfce283",
+      "utc_ns": 1792309264252489553,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0081",
+      "stream": "292ff611-88f3-44e8-adb9-3f3ce47c05b2",
+      "utc_ns": 1792309261937639429,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0082",
+      "stream": "99b12e89-fe1d-4347-8a85-01a5186ca5e8",
+      "utc_ns": 1792309262716173632,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0083",
+      "stream": "da218c0f-4716-4e89-bb2e-00fd6a854d74",
+      "utc_ns": 1792309261039093805,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0084",
+      "stream": "7ad88729-3981-40ad-a366-b4c33c2a28df",
+      "utc_ns": 1792309259779315535,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0085",
+      "stream": "315adab2-39f2-424e-8c6b-1921d8f6f07e",
+      "utc_ns": 1792309263321781575,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0086",
+      "stream": "9646d32f-b9eb-4b36-a9ad-0fc94faa1ddc",
+      "utc_ns": 1792309263641216906,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0087",
+      "stream": "4d46f215-2686-4920-a514-78e551664e88",
+      "utc_ns": 1792309262401227230,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0088",
+      "stream": "9b0190ec-5aa6-48f8-bf61-70daeb466934",
+      "utc_ns": 1792309261029956297,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0089",
+      "stream": "42ccd38d-91f0-4989-aaa2-82f2876d200f",
+      "utc_ns": 1792309263313326879,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0090",
+      "stream": "2f7057f9-5fdd-458f-a7e5-78219fc09f17",
+      "utc_ns": 1792309264284706911,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0091",
+      "stream": "166a0974-76eb-46af-8ff3-63d6e275fc80",
+      "utc_ns": 1792309264079388979,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0092",
+      "stream": "27e995c2-98d0-4059-a17c-36e1c6a5a243",
+      "utc_ns": 1792309262541713353,
+      "raw_bytes": 31498,
+      "raw_received": 9,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0093",
+      "stream": "f738d63a-76d6-4863-9d20-93981ba6053c",
+      "utc_ns": 1792309263184479023,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0094",
+      "stream": "5ef8f669-e0fd-4c53-9def-adf024eef64d",
+      "utc_ns": 1792309264616332900,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0095",
+      "stream": "442ab6a0-42b7-40f9-88ac-68767214be64",
+      "utc_ns": 1792309261606000048,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0096",
+      "stream": "1f757e9d-8019-466c-bdb6-850535cacc36",
+      "utc_ns": 1792309265026301976,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0097",
+      "stream": "692f4cc3-949a-4e49-a0c8-5e9c29150c05",
+      "utc_ns": 1792309264781845686,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0098",
+      "stream": "61c20f4a-2bf0-4f03-b842-d3d828ad64e7",
+      "utc_ns": 1792309263063282060,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0099",
+      "stream": "420340c5-b98f-4a61-be0e-711401efb3ff",
+      "utc_ns": 1792309265010392590,
+      "raw_bytes": 417029,
+      "raw_received": 137,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0100",
+      "stream": "c5e57a12-b6e3-4eef-b4e3-7fb7ff578d56",
+      "utc_ns": 1792309267282569369,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0101",
+      "stream": "f5e4d783-553d-451c-b249-57533722aa4b",
+      "utc_ns": 1792309267843263091,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0102",
+      "stream": "0876d835-70dc-438f-8ea2-3e1b6b459fc1",
+      "utc_ns": 1792309263658013098,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0103",
+      "stream": "d874c27d-ffc0-47d9-aef4-9322f456ac71",
+      "utc_ns": 1792309265120231297,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0104",
+      "stream": "d96c38f8-bc38-4b4e-8bdb-74834e2811c7",
+      "utc_ns": 1792309266728729134,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0105",
+      "stream": "098a478e-0dff-4c5c-915f-d2d9ad25d0d0",
+      "utc_ns": 1792309270401669333,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0106",
+      "stream": "05101d0b-9f32-4871-8ee7-94dd4f2f8f7b",
+      "utc_ns": 1792309270080892639,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0107",
+      "stream": "d4a754ff-91bc-4cae-b4e7-e3c0022eac96",
+      "utc_ns": 1792309268343870731,
+      "raw_bytes": 2762880,
+      "raw_received": 2959,
+      "published_markets": 699,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0108",
+      "stream": "73eb9e58-80f0-4e79-88db-f45098f604ee",
+      "utc_ns": 1792309264895300873,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0109",
+      "stream": "099bf68a-9ea1-4006-96f4-627db88f46a6",
+      "utc_ns": 1792309267561426339,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0110",
+      "stream": "5bb69ead-ae66-4f68-a71e-965e35d0e563",
+      "utc_ns": 1792309268751911367,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0111",
+      "stream": "88c73437-2824-4ef9-afac-ebf828433418",
+      "utc_ns": 1792309268807769621,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0112",
+      "stream": "0af06936-5800-4109-852b-01a3fb1f3dbc",
+      "utc_ns": 1792309269545381954,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0113",
+      "stream": "97734c7f-c221-44ae-beb6-b76e0aa5b4ef",
+      "utc_ns": 1792309268103988040,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0114",
+      "stream": "5689876d-cdd5-4fdc-9910-477392deefd8",
+      "utc_ns": 1792309269501751525,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0115",
+      "stream": "85fda07e-da57-40db-885b-90ff4151a20d",
+      "utc_ns": 1792309265365147483,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0116",
+      "stream": "d03315ec-0dc1-4950-a922-7bcefb12b14c",
+      "utc_ns": 1792309265357540926,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0117",
+      "stream": "99e01a9e-0a61-4b8b-89fc-f04ec6ebcb36",
+      "utc_ns": 1792309265078423551,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0118",
+      "stream": "f3544505-93f6-497f-8c52-e699dc99626f",
+      "utc_ns": 1792309265356581630,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0119",
+      "stream": "0ebb4642-6f81-407d-9129-ec10dc4e8f07",
+      "utc_ns": 1792309268457563367,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0120",
+      "stream": "b1055c6e-e621-4aba-81d9-06c4d4d3f317",
+      "utc_ns": 1792309269942333050,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0121",
+      "stream": "29662a72-d9aa-425b-a9e6-c48a4168b861",
+      "utc_ns": 1792309270363655772,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0122",
+      "stream": "382e7874-109c-4470-98e0-b39dbb7d28be",
+      "utc_ns": 1792309269566553080,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0123",
+      "stream": "3b6a6d1d-049c-473e-9f7b-c43b402fa628",
+      "utc_ns": 1792309269076674182,
+      "raw_bytes": 530422,
+      "raw_received": 390,
+      "published_markets": 236,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0124",
+      "stream": "709e1af6-6ebb-4f45-b938-2b3f350cbfba",
+      "utc_ns": 1792309271316438049,
+      "raw_bytes": 2025182,
+      "raw_received": 1252,
+      "published_markets": 988,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0125",
+      "stream": "18feb070-6923-477e-bf3f-8db8f94e79b5",
+      "utc_ns": 1792309272030570628,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    },
+    {
+      "node": "Q-0126",
+      "stream": "9dde8c93-2378-48e5-b2db-bed50bd152d7",
+      "utc_ns": 1792309269875394756,
+      "raw_bytes": 0,
+      "raw_received": 0,
+      "published_markets": 0,
+      "parse_errors": 0
+    }
+  ]
+}

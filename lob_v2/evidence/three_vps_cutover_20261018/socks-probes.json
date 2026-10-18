@@ -1,0 +1,29 @@
+{
+  "utc_ns": 1792308834986632399,
+  "probes": [
+    {
+      "proxy_port": 18463,
+      "returncode": 0,
+      "result": "1792308834\n200",
+      "error": ""
+    },
+    {
+      "proxy_port": 18464,
+      "returncode": 0,
+      "result": "1792308832\n200",
+      "error": ""
+    },
+    {
+      "proxy_port": 18465,
+      "returncode": 0,
+      "result": "1792308832\n200",
+      "error": ""
+    },
+    {
+      "proxy_port": 18466,
+      "returncode": 0,
+      "result": "1792308832\n200",
+      "error": ""
+    }
+  ]
+}
