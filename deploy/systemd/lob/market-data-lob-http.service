@@ -1,0 +1,18 @@
+[Unit]
+Description=Read-only LOB V2 HTTP snapshot bridge
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/develop/polymarket/repos/market-data
+ExecStart=%h/develop/polymarket/repos/market-data/.venv/bin/python lob_v2/tools/http_books.py --root %h/develop/polymarket/repos/market-data/lob_v2/runs/production-20261017
+Restart=on-failure
+RestartSec=15
+MemoryMax=256M
+TasksMax=16
+CPUQuota=50%
+NoNewPrivileges=true
+UMask=0077
+
+[Install]
+WantedBy=default.target

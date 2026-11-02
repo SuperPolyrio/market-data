@@ -1,0 +1,16 @@
+[Unit]
+Description=Dedicated LOB V2 HTTP reader tunnel to GCP
+After=network-online.target market-data-lob-http.service
+Wants=market-data-lob-http.service
+
+[Service]
+EnvironmentFile=%h/.config/market-data/lob-http.env
+ExecStart=/bin/bash -lc 'exec /usr/bin/ssh -N -T -i "$${MARKET_DATA_LOB_SSH_KEY}" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o ProxyCommand=none -o ProxyJump=none -o ControlPath=none -o ConnectTimeout=10 -o ExitOnForwardFailure=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -R 127.0.0.1:18861:127.0.0.1:18861 "$${MARKET_DATA_LOB_SSH_TARGET}"'
+Restart=always
+RestartSec=15
+MemoryMax=64M
+TasksMax=8
+NoNewPrivileges=true
+
+[Install]
+WantedBy=default.target
