@@ -137,6 +137,8 @@ class Books:
 def create_app(root):
     books = Books(root)
     app = web.Application(client_max_size=1024)
+    from crypto_reference import register_reference_routes
+    register_reference_routes(app, books)
 
     async def book(request):
         token, other = request.match_info['token'], request.query.get('noTokenId', '')
