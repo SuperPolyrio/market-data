@@ -6,8 +6,10 @@ No exchange connections, journal replay, database writes or collector startup.
 import argparse
 import asyncio
 from collections import OrderedDict
+from contextlib import suppress
 from datetime import datetime, timezone, timedelta
 import json
+import logging
 from pathlib import Path
 import re
 import sqlite3
@@ -19,6 +21,12 @@ sys.path[:0] = [str(PACKAGE / ('.vendor312' if sys.version_info >= (3, 12) else 
 from aiohttp import web
 from lobv2.node import receive_snapshot, confirm_snapshot
 from lobv2.wire import control, send
+
+READ_TIMEOUT_SECONDS = 2.0
+
+
+def retry_seconds(error):
+    return 2 if isinstance(error, (TimeoutError, OSError, sqlite3.OperationalError)) else 15
 
 
 def iso(value):
@@ -57,6 +65,9 @@ class Books:
         self.cache = OrderedDict()
         self.pending = {}
         self.maximum = 4
+        self.maximum_pending = 16
+        self.slots = asyncio.Semaphore(self.maximum)
+        self.active = 0
         self.last_read = None
 
     def route(self, token, other):
@@ -85,7 +96,10 @@ class Books:
             await confirm_snapshot(reader, writer, snapshot, session)
         finally:
             writer.close()
-            await writer.wait_closed()
+            # A peer reset during teardown cannot invalidate an already
+            # verified snapshot, or replace the original handoff exception.
+            with suppress(OSError):
+                await writer.wait_closed()
         items = snapshot['items']
         if len(items) > 1 or (items and items[0]['market'] != market):
             raise ValueError('Gateway snapshot identity mismatch')
@@ -111,16 +125,27 @@ class Books:
             return cached[1]
         if key in self.pending:
             return await asyncio.shield(self.pending[key])
-        if len(self.pending) >= self.maximum:
+        if len(self.pending) >= self.maximum_pending:
             raise web.HTTPServiceUnavailable(text='Book reader is at capacity', headers={'Retry-After': '5'})
+
+        async def admitted_read():
+            async with self.slots:
+                self.active += 1
+                try:
+                    return await self.read(token, other)
+                finally:
+                    self.active -= 1
 
         async def build():
             try:
-                payload = await asyncio.wait_for(self.read(token, other), 2.0)
+                # Waiting shares the existing two-second request budget. Four
+                # reference assets must not immediately reject a display read.
+                payload = await asyncio.wait_for(admitted_read(), READ_TIMEOUT_SECONDS)
                 self.cache[key] = time.monotonic() + 2, payload
                 return payload
             except Exception as error:
-                self.cache[key] = time.monotonic() + 15, error
+                self.cache[key] = time.monotonic() + retry_seconds(error), error
+                logging.warning('LOB snapshot read failed: %s', type(error).__name__)
                 raise
             finally:
                 self.pending.pop(key, None)
@@ -149,14 +174,17 @@ def create_app(root):
             return web.json_response(payload, headers={'Cache-Control': 'no-store'})
         except web.HTTPException:
             raise
-        except Exception:
-            return web.json_response({'status': 'unavailable', 'source': 'market-data', 'runtimeModel': 'lob-v2'},
-                                     status=503, headers={'Retry-After': '15', 'Cache-Control': 'no-store'})
+        except Exception as error:
+            # Error class only: no paths, SQL, proxy addresses or raw exceptions.
+            return web.json_response({'status': 'unavailable', 'source': 'market-data', 'runtimeModel': 'lob-v2',
+                                      'errorCode': type(error).__name__},
+                                     status=503, headers={'Retry-After': str(retry_seconds(error)), 'Cache-Control': 'no-store'})
 
     async def health(request):
         ready = books.last_read is not None and time.monotonic() - books.last_read < 60
         return web.json_response({'source': 'market-data', 'runtimeModel': 'lob-v2',
-                                  'status': 'ok' if ready else 'unverified', 'activeReads': len(books.pending),
+                                  'status': 'ok' if ready else 'unverified', 'activeReads': books.active,
+                                  'pendingReads': len(books.pending), 'maxPendingReads': books.maximum_pending,
                                   'maxConcurrentReads': books.maximum, 'cachedBooks': len(books.cache),
                                   'upstreamCompleteness': 'UNKNOWN'}, status=200 if ready else 503)
 
